@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Patient Management System - Landing Page</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', sans-serif;
+            background: #f4f7fb;
+            color: #333;
+        }
+
+        /* Header */
+        header {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            background: #103384;
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 25px;
+            z-index: 1000;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.6);
+        }
+
+        header .logo {
+            font-size: 26px;
+            font-weight: bold;
+        }
+
+        header .nav-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .login-btn, .register-btn {
+            cursor: pointer;
+            font-weight: bold;
+            padding: 8px 15px;
+            border-radius: 6px;
+            border: none;
+            color: white;
+            transition: transform 0.3s, background 0.3s;
+        }
+
+        .login-btn {
+            background: linear-gradient(135deg, #0077b6, #0096c7);
+        }
+
+        .login-btn:hover {
+            background: linear-gradient(135deg, #005f87, #0077b6);
+            transform: scale(1.05);
+        }
+
+        .register-btn {
+            background: linear-gradient(135deg, #ff7f50, #ff4500);
+        }
+
+        .register-btn:hover {
+            background: linear-gradient(135deg, #e85c00, #ff2d00);
+            transform: scale(1.05);
+        }
+
+        .hamburger {
+            font-size: 26px;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+
+        /* Section Titles */
+        .section-title {
+            text-align: center;
+            font-size: 30px;
+            font-weight: bold;
+            color: #0077b6;
+            margin-bottom: 20px;
+            position: relative;
+            display: inline-block;
+            padding-bottom: 8px;
+        }
+
+        .section-title::after {
+            content: "";
+            position: absolute;
+            width: 80px;
+            height: 4px;
+            background: #00b4d8;
+            left: 50%;
+            transform: translateX(-50%);
+            bottom: 0;
+            border-radius: 2px;
+        }
+
+        /* Carousel */
+        .carousel-container {
+            margin-top: 70px;
+            position: relative;
+            width: 100%;
+            height: 350px;
+            overflow: hidden;
+        }
+
+        .carousel-slide {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            transition: opacity 1s ease-in-out;
+        }
+
+        .carousel-slide img {
+            width: 100%;
+            height: 350px;
+            object-fit: cover;
+        }
+
+        .carousel-slide.active {
+            opacity: 1;
+        }
+
+        /* Epidemic alert */
+        .epidemic-alert {
+            background: linear-gradient(90deg, #ff4d4d, #ff6b6b);
+            color: white;
+            padding: 18px;
+            text-align: center;
+            font-size: 18px;
+            margin: 25px auto;
+            border-radius: 10px;
+            max-width: 950px;
+            font-weight: bold;
+            animation: pulse 2s infinite;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.03); }
+        }
+
+        /* Specialists */
+        .specialists {
+            background: linear-gradient(180deg, #f0f9ff, #eaf6f6);
+            padding: 40px 20px;
+            text-align: center;
+            border-top: 4px solid #0077b6;
+            border-bottom: 4px solid #0077b6;
+        }
+
+        .doctor-list {
+            display: flex;
+            justify-content: center;
+            gap: 25px;
+            flex-wrap: wrap;
+        }
+
+        .doctor {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 6px 14px rgba(0,0,0,0.15);
+            width: 220px;
+            transition: transform 0.4s;
+            text-align: center;
+            padding-bottom: 15px;
+        }
+
+        .doctor img {
+            width: 100%;
+            border-radius: 15px 15px 0 0;
+            border-bottom: 4px solid #0077b6;
+        }
+
+        .doctor .name {
+            font-size: 16px;
+            font-weight: bold;
+            margin-top: 10px;
+            color: #333;
+        }
+
+        .doctor .specialty {
+            font-size: 14px;
+            color: #0077b6;
+        }
+
+        .doctor:hover {
+            transform: translateY(-8px) scale(1.05);
+        }
+
+        /* Hospitals Section */
+        .hospitals {
+            background: linear-gradient(180deg, #f0f9ff, #eaf6f6);
+            padding: 50px 20px;
+            text-align: center;
+            border-bottom: 4px solid #0077b6;
+            position: relative;
+        }
+
+        .hospital-carousel-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            max-width: 1000px;
+            margin: 0 auto;
+            position: relative;
+        }
+
+        .hospital-carousel {
+            display: flex;
+            overflow: hidden;
+            gap: 20px;
+            scroll-behavior: smooth;
+            width: 80%;
+        }
+
+        .hospital-card {
+            min-width: 250px;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 6px 14px rgba(0, 0, 0, 0.15);
+            overflow: hidden;
+            transition: transform 0.4s ease, box-shadow 0.4s ease;
+            text-align: center;
+        }
+
+        .hospital-card img {
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
+            border-bottom: 4px solid #0077b6;
+        }
+
+        .hospital-info {
+            padding: 15px;
+        }
+
+        .hospital-info h3 {
+            margin: 5px 0;
+            font-size: 18px;
+            color: #103384;
+        }
+
+        .hospital-info p {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .rating {
+            font-size: 14px;
+            font-weight: bold;
+            color: #ff9800;
+        }
+
+        .hospital-card:hover {
+            transform: translateY(-6px) scale(1.03);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .hospital-nav {
+            background: #0077b6;
+            color: white;
+            border: none;
+            font-size: 24px;
+            padding: 10px 15px;
+            cursor: pointer;
+            border-radius: 50%;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            transition: background 0.3s;
+        }
+
+        .hospital-nav:hover {
+            background: #005f87;
+        }
+
+        .hospital-nav.prev {
+            position: absolute;
+            left: 0;
+        }
+
+        .hospital-nav.next {
+            position: absolute;
+            right: 0;
+        }
+
+        /* Health Tips - Colorful Flip Cards */
+        .health-tips {
+            background: #f4f4f4;
+            padding: 40px 20px;
+            text-align: center;
+            border-bottom: 4px solid #0077b6;
+        }
+
+        .tips-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        .tip-card {
+            perspective: 1000px;
+        }
+
+        .tip-inner {
+            position: relative;
+            width: 100%;
+            height: 220px;
+            transform-style: preserve-3d;
+            transition: transform 0.8s;
+        }
+
+        .tip-card:hover .tip-inner {
+            transform: rotateY(180deg);
+        }
+
+        .tip-front, .tip-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 16px;
+            padding: 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .tip-front span {
+            font-size: 35px;
+            margin-bottom: 10px;
+        }
+
+        .tip-back {
+            transform: rotateY(180deg);
+            font-size: 14px;
+            text-align: center;
+        }
+
+        .tip-card:nth-child(1) .tip-front { background: linear-gradient(135deg, #00b4d8, #0077b6); }
+        .tip-card:nth-child(1) .tip-back { background: linear-gradient(135deg, #0077b6, #023e8a); }
+        .tip-card:nth-child(2) .tip-front { background: linear-gradient(135deg, #4caf50, #2e7d32); }
+        .tip-card:nth-child(2) .tip-back { background: linear-gradient(135deg, #2e7d32, #1b5e20); }
+        .tip-card:nth-child(3) .tip-front { background: linear-gradient(135deg, #ff9800, #f57c00); }
+        .tip-card:nth-child(3) .tip-back { background: linear-gradient(135deg, #ef6c00, #e65100); }
+        .tip-card:nth-child(4) .tip-front { background: linear-gradient(135deg, #9c27b0, #6a1b9a); }
+        .tip-card:nth-child(4) .tip-back { background: linear-gradient(135deg, #7b1fa2, #4a148c); }
+
+        /* Testimonials */
+        .testimonials {
+            background: linear-gradient(180deg, #eef7ff, #e3f2fd);
+            padding: 40px 20px;
+            text-align: center;
+            border-bottom: 4px solid #0077b6;
+        }
+
+        .testimonial-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+        }
+
+        .testimonial {
+            display: none;
+            font-size: 16px;
+            font-style: italic;
+        }
+
+        .testimonial.active {
+            display: block;
+        }
+
+        /* Emergency button */
+        .emergency {
+            position: fixed;
+            bottom: 25px;
+            right: 25px;
+            z-index: 1100;
+            text-align: center;
+        }
+
+        .emergency button {
+            background: radial-gradient(circle, #ff0000, #ff4d4d);
+            color: white;
+            border: none;
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            box-shadow: 0 0 20px rgba(255,0,0,0.7);
+            animation: glow 1.5s infinite alternate, bounce 2s infinite ease-in-out;
+        }
+
+        @keyframes glow {
+            from { box-shadow: 0 0 10px #ff4d4d, 0 0 20px #ff6b6b; }
+            to { box-shadow: 0 0 25px #ff0000, 0 0 35px #ff4d4d; }
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-5px); }
+        }
+
+        .emergency-options {
+            display: none;
+            position: absolute;
+            bottom: 90px;
+            right: 0;
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 12px;
+            overflow: hidden;
+            z-index: 1200;
+            padding: 8px 0;
+        }
+
+        .emergency-options button {
+            background: linear-gradient(135deg, #ff7f50, #ff4500);
+            width: 160px;
+            padding: 12px;
+            border: none;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+            display: block;
+            margin: 5px 10px;
+            border-radius: 6px;
+            transition: background 0.3s;
+        }
+
+        .emergency-options button:hover {
+            background: linear-gradient(135deg, #e85c00, #ff2d00);
+        }
+
+        /* Overlay */
+        .overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.4);
+            z-index: 1050;
+        }
+
+        /* Footer */
+        footer {
+            background: #0c286a;
+            color: white;
+            text-align: center;
+            padding: 35px;
+            margin-top: 40px;
+            font-size: 14px;
+            position: relative;
+            bottom: 0;
+            width: 100%;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.6);
+        }
+
+        footer p {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="logo">PatientCare</div>
+    <div class="nav-right">
+        <button class="login-btn">Login</button>
+        <button class="register-btn">Register</button>
+        <div class="hamburger">&#9776;</div>
+    </div>
+</header>
+
+<!-- Carousel -->
+<div class="carousel-container">
+    <div class="carousel-slide active">
+        <img src="images/pic1.jpeg" alt="United Hospital">
+    </div>
+    <div class="carousel-slide">
+        <img src="images/pic2.jpg" alt="Square Hospital">
+    </div>
+    <div class="carousel-slide">
+        <img src="images/pic3.jpg" alt="EverCare Hospital">
+    </div>
+    <div class="carousel-slide">
+        <img src="images/pic4.jpg" alt="Dhaka Medical College Hospital">
+    </div>
+    <div class="carousel-slide">
+        <img src="images/pic5.jpeg" alt="CMH">
+    </div>
+</div>
+
+<!-- Epidemic Alert -->
+<div class="epidemic-alert">
+    🚨 Epidemic Alert: Seasonal flu cases rising! Visit nearby hospitals for vaccination.
+</div>
+
+<!-- Specialists Section -->
+<div class="specialists">
+    <h2 class="section-title">Our Top Specialists</h2>
+    <div class="doctor-list">
+        <div class="doctor">
+            <img src="images/doctor1.jpg" alt="Doctor 1">
+            <div class="name">Dr. Ahsan</div>
+            <div class="specialty">Cardiologist</div>
+        </div>
+        <div class="doctor">
+            <img src="images/doctor2.jpeg" alt="Doctor 2">
+            <div class="name">Dr. Rina</div>
+            <div class="specialty">Neurologist</div>
+        </div>
+        <div class="doctor">
+            <img src="images/doctor3.png" alt="Doctor 3">
+            <div class="name">Dr. Rahman</div>
+            <div class="specialty">Orthopedic</div>
+        </div>
+    </div>
+</div>
+
+<!-- Hospitals Section -->
+<div class="hospitals">
+    <h2 class="section-title">Top 5 Hospitals Near You</h2>
+    <div class="hospital-carousel-container">
+        <button class="hospital-nav prev" id="hospitalPrev">❮</button>
+        <div class="hospital-carousel" id="hospitalCarousel">
+            <div class="hospital-card">
+                <img src="images/hospital1.jpg" alt="United Hospital">
+                <div class="hospital-info">
+                    <h3>United Hospital</h3>
+                    <p>📍 Gulshan, Dhaka</p>
+                    <div class="rating">⭐ 4.8</div>
+                </div>
+            </div>
+            <div class="hospital-card">
+                <img src="images/hospital2.jpg" alt="Square Hospital">
+                <div class="hospital-info">
+                    <h3>Square Hospital</h3>
+                    <p>📍 Panthapath, Dhaka</p>
+                    <div class="rating">⭐ 4.7</div>
+                </div>
+            </div>
+            <div class="hospital-card">
+                <img src="images/hospital3.jpg" alt="Evercare Hospital">
+                <div class="hospital-info">
+                    <h3
+                                        Evercare Hospital</h3>
+                    <p>📍 Bashundhara, Dhaka</p>
+                    <div class="rating">⭐ 4.6</div>
+                </div>
+            </div>
+            <div class="hospital-card">
+                <img src="images/hospital4.jpg" alt="Dhaka Medical College Hospital">
+                <div class="hospital-info">
+                    <h3>Dhaka Medical College</h3>
+                    <p>📍 Shahbagh, Dhaka</p>
+                    <div class="rating">⭐ 4.5</div>
+                </div>
+            </div>
+            <div class="hospital-card">
+                <img src="images/hospital5.jpg" alt="CMH Dhaka">
+                <div class="hospital-info">
+                    <h3>CMH Dhaka</h3>
+                    <p>📍 Cantonment, Dhaka</p>
+                    <div class="rating">⭐ 4.9</div>
+                </div>
+            </div>
+        </div>
+        <button class="hospital-nav next" id="hospitalNext">❯</button>
+    </div>
+</div>
+
+<!-- Health Tips -->
+<div class="health-tips">
+    <h2 class="section-title">Health Tips</h2>
+    <div class="tips-grid">
+        <div class="tip-card">
+            <div class="tip-inner">
+                <div class="tip-front">
+                    <span>💧</span>Stay Hydrated
+                </div>
+                <div class="tip-back">
+                    Drink at least 8 glasses of water every day to maintain proper body functions.
+                </div>
+            </div>
+        </div>
+        <div class="tip-card">
+            <div class="tip-inner">
+                <div class="tip-front">
+                    <span>🏃‍♂️</span>Daily Exercise
+                </div>
+                <div class="tip-back">
+                    Exercise for at least 30 minutes daily to improve heart health and stamina.
+                </div>
+            </div>
+        </div>
+        <div class="tip-card">
+            <div class="tip-inner">
+                <div class="tip-front">
+                    <span>🥗</span>Balanced Diet
+                </div>
+                <div class="tip-back">
+                    Include fruits, vegetables, and proteins for a balanced diet and strong immunity.
+                </div>
+            </div>
+        </div>
+        <div class="tip-card">
+            <div class="tip-inner">
+                <div class="tip-front">
+                    <span>🛌</span>Proper Sleep
+                </div>
+                <div class="tip-back">
+                    Ensure 7–8 hours of good sleep to allow your body to recover and stay healthy.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Testimonials -->
+<div class="testimonials">
+    <h2 class="section-title">What People Say About Us</h2>
+    <div class="testimonial-container">
+        <div class="testimonial active">"PatientCare made it so easy to book an ICU bed. Life-saving service!" – Rahim</div>
+        <div class="testimonial">"The doctors listed here are excellent and professional!" – Ayesha</div>
+        <div class="testimonial">"Ambulance request was instant. Highly recommend!" – Karim</div>
+    </div>
+</div>
+
+<!-- Overlay -->
+<div class="overlay" id="overlay"></div>
+
+<!-- Emergency Button -->
+<div class="emergency">
+    <button id="emergencyBtn">🚨</button>
+    <div class="emergency-options" id="emergencyOptions">
+        <button>🚑 Call Ambulance</button>
+        <button>🏥 Request ICU Bed</button>
+    </div>
+</div>
+
+<!-- Footer -->
+<footer>
+    <p>&copy; 2025 PatientCare. All Rights Reserved</p>
+    <p>Contact: info@patientcare.com | Phone: +880 1234 567 890</p>
+</footer>
+
+<script>
+    // Carousel
+    const slides = document.querySelectorAll('.carousel-slide');
+    let currentIndex = 0;
+    setInterval(() => {
+        slides[currentIndex].classList.remove('active');
+        currentIndex = (currentIndex + 1) % slides.length;
+        slides[currentIndex].classList.add('active');
+    }, 5000);
+
+    // Emergency button toggle
+    const emergencyBtn = document.getElementById("emergencyBtn");
+    const emergencyOptions = document.getElementById("emergencyOptions");
+    const overlay = document.getElementById("overlay");
+
+    emergencyBtn.addEventListener("click", () => {
+        const isVisible = emergencyOptions.style.display === "block";
+        emergencyOptions.style.display = isVisible ? "none" : "block";
+        overlay.style.display = isVisible ? "none" : "block";
+    });
+
+    overlay.addEventListener("click", () => {
+        emergencyOptions.style.display = "none";
+        overlay.style.display = "none";
+    });
+
+    // Testimonials
+    const testimonials = document.querySelectorAll('.testimonial');
+    let testimonialIndex = 0;
+    setInterval(() => {
+        testimonials[testimonialIndex].classList.remove('active');
+        testimonialIndex = (testimonialIndex + 1) % testimonials.length;
+        testimonials[testimonialIndex].classList.add('active');
+    }, 4000);
+
+    // Hospital Carousel Navigation
+    const hospitalCarousel = document.getElementById('hospitalCarousel');
+    const hospitalNext = document.getElementById('hospitalNext');
+    const hospitalPrev = document.getElementById('hospitalPrev');
+
+    hospitalNext.addEventListener('click', () => {
+        hospitalCarousel.scrollBy({ left: 270, behavior: 'smooth' });
+    });
+
+    hospitalPrev.addEventListener('click', () => {
+        hospitalCarousel.scrollBy({ left: -270, behavior: 'smooth' });
+    });
+</script>
+
+</body>
+</html>
+
