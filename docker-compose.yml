@@ -1,0 +1,46 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: amraachi
+      POSTGRES_USER: amraachi
+      POSTGRES_PASSWORD: amraachi
+    ports: ["5432:5432"]
+    volumes: [dbdata:/var/lib/postgresql/data]
+
+  valkey:
+    image: valkey/valkey:7
+    ports: ["6379:6379"]
+
+  backend:
+    build: ./backend
+    command: bash -lc "python manage.py migrate && daphne -b 0.0.0.0 -p 8000 core.asgi:application"
+    environment:
+      DATABASE_URL: postgres://amraachi:amraachi@db:5432/amraachi
+      REDIS_URL: redis://valkey:6379/0
+      DJANGO_SECRET_KEY: "dev-secret"
+      DJANGO_DEBUG: "1"
+      ALLOWED_HOSTS: "*"
+      CORS_ALLOW_ALL: "1"
+      OSRM_URL: http://osrm:5000
+    volumes:
+      - ./backend:/app
+      - ./backend/data:/app/data
+    depends_on: [db, valkey]
+  frontend:
+    build: ./frontend
+    #command: bash -lc "npm run dev -- --host 0.0.0.0"
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    ports: ["5173:5173"]
+    volumes: ["./frontend:/usr/src/app"]
+    depends_on: [backend]
+
+  osrm:
+    image: ghcr.io/project-osrm/osrm-backend
+    # expects preprocessed .osrm files mounted at /data
+    command: osrm-routed --algorithm mld /data/bangladesh-latest.osrm
+    ports: ["5000:5000"]
+    volumes: ["./osrm:/data"]
+
+volumes:
+  dbdata:
