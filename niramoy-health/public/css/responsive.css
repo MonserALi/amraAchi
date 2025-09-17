@@ -1,0 +1,595 @@
+/* Responsive Styles */
+
+/* Extra large devices (1200px and down) */
+@media (max-width: 1199.98px) {
+  .hero-content h1 {
+    font-size: 2.8rem;
+  }
+
+  .section-title {
+    font-size: 2rem;
+  }
+
+  .doctor-card,
+  .department-card,
+  .service-card {
+    margin-bottom: 20px;
+  }
+}
+
+/* Large devices (992px and down) */
+@media (max-width: 991.98px) {
+  .hero-content h1 {
+    font-size: 2.5rem;
+  }
+
+  .hero-content p {
+    font-size: 1.1rem;
+  }
+
+  .section-title {
+    font-size: 1.8rem;
+  }
+
+  .emergency-buttons {
+    right: 20px;
+  }
+
+  .sos-button,
+  .epidemic-button {
+    width: 70px;
+    height: 70px;
+  }
+
+  .emergency-button i {
+    font-size: 24px;
+  }
+
+  .emergency-text {
+    font-size: 11px;
+  }
+
+  #map {
+    height: 350px;
+    margin-bottom: 30px;
+  }
+
+  .hospital-list {
+    max-height: none;
+  }
+
+  .epidemic-content {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .epidemic-info {
+    margin-bottom: 20px;
+  }
+
+  .epidemic-icon {
+    margin-right: 0;
+    margin-bottom: 10px;
+  }
+
+  .navbar-nav {
+    text-align: center;
+    padding: 20px 0;
+  }
+
+  .auth-buttons {
+    margin-top: 15px;
+    text-align: center;
+  }
+
+  .auth-buttons .btn {
+    margin: 5px;
+  }
+
+  .footer-newsletter {
+    margin-top: 20px;
+  }
+}
+
+/* Medium devices (768px and down) */
+@media (max-width: 767.98px) {
+  .hero-content h1 {
+    font-size: 2rem;
+  }
+
+  .hero-content p {
+    font-size: 1rem;
+  }
+
+  .section-title {
+    font-size: 1.6rem;
+  }
+
+  .section-subtitle {
+    font-size: 0.9rem;
+  }
+
+  .service-card,
+  .department-card,
+  .doctor-card,
+  .testimonial-card {
+    margin-bottom: 30px;
+  }
+
+  .contact-info span {
+    display: block;
+    margin-bottom: 5px;
+  }
+
+  .auth-buttons {
+    margin-top: 10px;
+  }
+
+  .newsletter-form {
+    flex-direction: column;
+  }
+
+  .newsletter-input {
+    border-radius: 5px;
+    margin-bottom: 10px;
+  }
+
+  .newsletter-btn {
+    border-radius: 5px;
+  }
+
+  .departments-scroller {
+    padding: 10px 0;
+  }
+
+  .epidemic-step {
+    padding: 15px;
+  }
+
+  .emergency-buttons {
+    right: 15px;
+    gap: 15px;
+  }
+
+  .sos-button,
+  .epidemic-button {
+    width: 60px;
+    height: 60px;
+  }
+
+  .emergency-button i {
+    font-size: 20px;
+  }
+
+  .emergency-text {
+    font-size: 10px;
+  }
+
+  .footer-logo {
+    text-align: center;
+    margin-bottom: 20px;
+  }
+
+  .social-icons-footer {
+    text-align: center;
+    margin-top: 15px;
+  }
+
+  .footer-links {
+    margin-bottom: 30px;
+  }
+
+  .footer-links h5 {
+    font-size: 1.1rem;
+  }
+
+  .footer-contact li {
+    margin-bottom: 10px;
+  }
+
+  .copyright {
+    text-align: center;
+    padding-top: 15px;
+    margin-top: 20px;
+  }
+}
+
+/* Small devices (576px and down) */
+@media (max-width: 575.98px) {
+  .hero-content h1 {
+    font-size: 1.8rem;
+  }
+
+  .hero-content p {
+    font-size: 0.9rem;
+  }
+
+  .section-title {
+    font-size: 1.4rem;
+  }
+
+  .section-subtitle {
+    font-size: 0.85rem;
+  }
+
+  .hero-btn {
+    padding: 10px 20px;
+    font-size: 0.9rem;
+  }
+
+  .service-card {
+    padding: 20px;
+  }
+
+  .service-icon {
+    width: 60px;
+    height: 60px;
+    font-size: 24px;
+  }
+
+  .service-card h3 {
+    font-size: 1.1rem;
+  }
+
+  .department-card {
+    min-width: 250px;
+  }
+
+  .doctor-img {
+    height: 200px;
+  }
+
+  .doctor-content {
+    padding: 15px;
+  }
+
+  .doctor-name {
+    font-size: 1.1rem;
+  }
+
+  .testimonial-card {
+    padding: 20px;
+  }
+
+  .testimonial-card p {
+    font-size: 0.9rem;
+  }
+
+  .client-img {
+    width: 50px;
+    height: 50px;
+  }
+
+  .client-name {
+    font-size: 1rem;
+  }
+
+  .appointment-content h2 {
+    font-size: 1.8rem;
+  }
+
+  .appointment-content p {
+    font-size: 1rem;
+  }
+
+  .appointment-btn {
+    padding: 10px 25px;
+    font-size: 1rem;
+  }
+
+  .epidemic-alert-title {
+    font-size: 1.6rem;
+  }
+
+  .epidemic-alert-subtitle {
+    font-size: 1rem;
+  }
+
+  .epidemic-step h3 {
+    font-size: 1.1rem;
+  }
+
+  .epidemic-step p {
+    font-size: 0.9rem;
+  }
+
+  .emergency-buttons {
+    right: 10px;
+    gap: 10px;
+  }
+
+  .sos-button,
+  .epidemic-button {
+    width: 50px;
+    height: 50px;
+  }
+
+  .emergency-button i {
+    font-size: 18px;
+  }
+
+  .emergency-text {
+    font-size: 9px;
+  }
+
+  .search-bar-section {
+    padding: 10px 0;
+  }
+
+  .search-input {
+    padding: 10px 15px 10px 45px;
+    font-size: 14px;
+  }
+
+  .search-icon {
+    left: 15px;
+    font-size: 16px;
+  }
+
+  .search-btn {
+    padding: 6px 15px;
+    font-size: 14px;
+  }
+
+  .top-header {
+    padding: 8px 0;
+  }
+
+  .contact-info span {
+    font-size: 13px;
+  }
+
+  .social-icons a {
+    width: 28px;
+    height: 28px;
+    font-size: 14px;
+  }
+
+  .lang-toggle {
+    padding: 4px 8px;
+    font-size: 13px;
+  }
+
+  .navbar-brand {
+    font-size: 1.5rem;
+  }
+
+  .navbar-nav .nav-link {
+    margin: 5px 0;
+  }
+
+  .auth-buttons .btn {
+    padding: 8px 15px;
+    font-size: 14px;
+  }
+}
+
+/* Extra small devices (375px and down) */
+@media (max-width: 374.98px) {
+  .hero-content h1 {
+    font-size: 1.6rem;
+  }
+
+  .section-title {
+    font-size: 1.2rem;
+  }
+
+  .service-card {
+    padding: 15px;
+  }
+
+  .service-icon {
+    width: 50px;
+    height: 50px;
+    font-size: 20px;
+  }
+
+  .service-card h3 {
+    font-size: 1rem;
+  }
+
+  .service-card p {
+    font-size: 0.85rem;
+  }
+
+  .department-card {
+    min-width: 220px;
+  }
+
+  .department-img {
+    height: 160px;
+  }
+
+  .department-content {
+    padding: 15px;
+  }
+
+  .department-content h3 {
+    font-size: 1rem;
+  }
+
+  .department-btn {
+    padding: 6px 15px;
+    font-size: 0.85rem;
+  }
+
+  .doctor-img {
+    height: 180px;
+  }
+
+  .doctor-content {
+    padding: 15px;
+  }
+
+  .doctor-name {
+    font-size: 1rem;
+  }
+
+  .doctor-specialty {
+    font-size: 0.9rem;
+  }
+
+  .doctor-bio {
+    font-size: 0.85rem;
+  }
+
+  .doctor-btn {
+    padding: 6px 15px;
+    font-size: 0.85rem;
+  }
+
+  .testimonial-card {
+    padding: 15px;
+  }
+
+  .testimonial-card p {
+    font-size: 0.85rem;
+  }
+
+  .client-img {
+    width: 40px;
+    height: 40px;
+  }
+
+  .client-name {
+    font-size: 0.9rem;
+  }
+
+  .client-title {
+    font-size: 0.8rem;
+  }
+
+  .appointment-content h2 {
+    font-size: 1.6rem;
+  }
+
+  .appointment-content p {
+    font-size: 0.9rem;
+  }
+
+  .appointment-btn {
+    padding: 8px 20px;
+    font-size: 0.9rem;
+  }
+
+  .epidemic-alert-title {
+    font-size: 1.4rem;
+  }
+
+  .epidemic-alert-subtitle {
+    font-size: 0.9rem;
+  }
+
+  .epidemic-step h3 {
+    font-size: 1rem;
+  }
+
+  .epidemic-step p {
+    font-size: 0.85rem;
+  }
+
+  .emergency-buttons {
+    right: 5px;
+    gap: 5px;
+  }
+
+  .sos-button,
+  .epidemic-button {
+    width: 45px;
+    height: 45px;
+  }
+
+  .emergency-button i {
+    font-size: 16px;
+  }
+
+  .emergency-text {
+    font-size: 8px;
+  }
+
+  .search-bar-section {
+    padding: 8px 0;
+  }
+
+  .search-input {
+    padding: 8px 12px 8px 40px;
+    font-size: 13px;
+  }
+
+  .search-icon {
+    left: 12px;
+    font-size: 14px;
+  }
+
+  .search-btn {
+    padding: 5px 12px;
+    font-size: 13px;
+  }
+
+  .top-header {
+    padding: 5px 0;
+  }
+
+  .contact-info span {
+    font-size: 12px;
+  }
+
+  .social-icons a {
+    width: 25px;
+    height: 25px;
+    font-size: 12px;
+  }
+
+  .lang-toggle {
+    padding: 3px 6px;
+    font-size: 12px;
+  }
+
+  .navbar-brand {
+    font-size: 1.3rem;
+  }
+
+  .navbar-nav .nav-link {
+    margin: 3px 0;
+    font-size: 14px;
+  }
+
+  .auth-buttons .btn {
+    padding: 6px 12px;
+    font-size: 13px;
+  }
+
+  .footer-logo {
+    font-size: 1.5rem;
+  }
+
+  .footer-links h5 {
+    font-size: 1rem;
+  }
+
+  .footer-links ul li a {
+    font-size: 14px;
+  }
+
+  .footer-contact li {
+    font-size: 14px;
+  }
+
+  .footer-newsletter p {
+    font-size: 14px;
+  }
+
+  .newsletter-input {
+    padding: 8px 12px;
+    font-size: 14px;
+  }
+
+  .newsletter-btn {
+    padding: 8px 12px;
+    font-size: 14px;
+  }
+
+  .copyright {
+    font-size: 14px;
+  }
+}

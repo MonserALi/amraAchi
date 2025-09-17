@@ -1,0 +1,65 @@
+# Enable URL rewriting
+RewriteEngine On
+
+# If the requested file or directory exists, serve it directly
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# Otherwise, redirect to index.php
+RewriteRule ^(.+)$ index.php?url=$1 [QSA,L]
+
+# Set default character set
+AddDefaultCharset UTF-8
+
+# Disable directory listing
+Options -Indexes
+
+# Handle errors
+ErrorDocument 404 /404
+ErrorDocument 500 /500
+
+# Set security headers
+<IfModule mod_headers.c>
+    # Protect against XSS attacks
+    Header set X-XSS-Protection "1; mode=block"
+    
+    # Prevent MIME-type sniffing
+    Header set X-Content-Type-Options "nosniff"
+    
+    # Prevent clickjacking
+    Header set X-Frame-Options "SAMEORIGIN"
+    
+    # Enable HSTS
+    Header set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    
+    # Referrer policy
+    Header set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+
+# PHP settings
+<IfModule mod_php.c>
+
+    # Maximum execution time
+    php_value max_execution_time 300
+    
+    # Maximum input time
+    php_value max_input_time 300
+    
+    # Memory limit
+    php_value memory_limit 256M
+    
+    # Maximum file upload size
+    php_value upload_max_filesize 20M
+    
+    # Maximum POST size
+    php_value post_max_size 25M
+    
+    # Session settings
+    php_value session.cookie_httponly 1
+    php_value session.cookie_secure 1
+    php_value session.cookie_samesite Strict
+</IfModule>
+# Add missing MIME types
+AddType text/css .css
+AddType application/javascript .js
