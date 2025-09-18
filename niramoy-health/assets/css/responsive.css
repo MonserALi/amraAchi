@@ -1,0 +1,137 @@
+/* ====== Responsive Styles ====== */
+
+/* Small devices (landscape phones, 576px and up) */
+@media (max-width: 576px) {
+  .hero-content h1 {
+    font-size: 32px;
+  }
+
+  .hero-content p {
+    font-size: 16px;
+  }
+
+  .hero-buttons {
+    flex-direction: column;
+  }
+
+  .section-header h2 {
+    font-size: 28px;
+  }
+
+  .service-card,
+  .doctor-card,
+  .epidemic-card,
+  .testimonial-card {
+    margin-bottom: 30px;
+  }
+
+  .app-info h2 {
+    font-size: 28px;
+  }
+
+  .app-buttons {
+    flex-direction: column;
+  }
+
+  .footer-about,
+  .footer-links,
+  .footer-contact {
+    margin-bottom: 30px;
+  }
+
+  .sos-button {
+    bottom: 20px;
+    right: 20px;
+  }
+
+  .sos-button button {
+    width: 50px;
+    height: 50px;
+  }
+
+  .sos-button button i {
+    font-size: 18px;
+  }
+
+  .sos-button button span {
+    font-size: 9px;
+  }
+
+  .map-container {
+    height: 300px;
+  }
+
+  .hospital-list {
+    height: 300px;
+  }
+}
+
+/* Medium devices (tablets, 768px and up) */
+@media (max-width: 768px) {
+  .header-top {
+    display: none;
+  }
+
+  .user-actions {
+    justify-content: center;
+  }
+
+  .hero-section {
+    padding: 60px 0 40px;
+  }
+
+  .hero-content {
+    text-align: center;
+    margin-bottom: 30px;
+  }
+
+  .epidemic-section,
+  .search-section,
+  .doctors-section,
+  .hospitals-section,
+  .services-section,
+  .testimonials-section {
+    padding: 60px 0;
+  }
+
+  .app-download-section {
+    padding: 60px 0;
+  }
+
+  .app-info {
+    text-align: center;
+    margin-bottom: 30px;
+  }
+
+  .main-footer {
+    padding: 50px 0 20px;
+  }
+
+  .hospital-list {
+    margin-top: 20px;
+    height: 300px;
+  }
+}
+
+/* Large devices (desktops, 992px and up) */
+@media (max-width: 992px) {
+  .navbar-nav {
+    text-align: center;
+    padding: 20px 0;
+  }
+
+  .navbar-nav .nav-item {
+    margin: 5px 0;
+  }
+
+  .hero-image {
+    margin-top: 30px;
+  }
+}
+
+/* Extra large devices (large desktops, 1200px and up) */
+@media (max-width: 1200px) {
+  .container {
+    max-width: 100%;
+  }
+}

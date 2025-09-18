@@ -1,0 +1,104 @@
+/* ====== Dark Mode Styles ====== */
+body.dark-mode {
+  background-color: #181a20;
+  color: #f1f1f1;
+}
+
+body.dark-mode .main-header {
+  background-color: #23272f;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+}
+
+body.dark-mode .header-top {
+  border-bottom-color: #333;
+}
+
+body.dark-mode .contact-info span {
+  color: #e0e0e0;
+}
+
+body.dark-mode .navbar-main {
+  background-color: #23272f;
+}
+
+body.dark-mode .navbar-nav .nav-link {
+  color: #f1f1f1;
+}
+
+body.dark-mode .navbar-nav .nav-link.active {
+  color: #4fd1c5;
+}
+
+body.dark-mode .hero-section {
+  background: linear-gradient(135deg, #23272f 0%, #181a20 100%);
+}
+
+body.dark-mode .hero-content h1 {
+  color: #e0e0e0;
+}
+
+body.dark-mode .hero-content p {
+  color: #bdbdbd;
+}
+
+body.dark-mode .epidemic-section,
+body.dark-mode .doctors-section,
+body.dark-mode .services-section {
+  background-color: #23272f;
+}
+
+body.dark-mode .epidemic-card,
+body.dark-mode .doctor-card,
+body.dark-mode .service-card,
+body.dark-mode .testimonial-card,
+body.dark-mode .search-container,
+body.dark-mode .hospital-list {
+  background-color: #23272f;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  border: 1px solid #23272f;
+}
+
+body.dark-mode .epidemic-card h3,
+body.dark-mode .doctor-info h3,
+body.dark-mode .service-card h3,
+body.dark-mode .hospital-item h4,
+body.dark-mode .author-info h4 {
+  color: #4fd1c5;
+}
+
+body.dark-mode .epidemic-card p,
+body.dark-mode .specialization,
+body.dark-mode .doctor-meta span,
+body.dark-mode .service-card p,
+body.dark-mode .testimonial-content p,
+body.dark-mode .author-info p,
+body.dark-mode .hospital-item p {
+  color: #b2b7c2;
+}
+
+body.dark-mode .app-download-section {
+  background: linear-gradient(135deg, #23272f 0%, #181a20 100%);
+}
+
+body.dark-mode .main-footer {
+  background-color: #181a20;
+}
+
+body.dark-mode .footer-about p,
+body.dark-mode .footer-links ul li a,
+body.dark-mode .contact-item p,
+body.dark-mode .copyright {
+  color: #bdbdbd;
+}
+
+body.dark-mode .social-links a {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+body.dark-mode .social-links a:hover {
+  background-color: var(--primary-color);
+}
+
+body.dark-mode .copyright {
+  border-top-color: #333;
+}
