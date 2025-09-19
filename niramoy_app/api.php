@@ -35,12 +35,58 @@ switch ($parts[0]) {
       handle_register_doctor();
     }
     break;
+  case 'driver':
+    if (!isset($parts[1])) {
+      json_response(['error' => 'Driver endpoint not specified'], 400);
+    }
+    $driverEndpoint = $parts[1];
+
+    switch ($driverEndpoint) {
+      case 'trips':
+        if (isset($parts[2]) && $parts[2] === 'active') {
+          handle_driver_active_trips();
+        } elseif (isset($parts[2]) && $parts[2] === 'completed') {
+          handle_driver_completed_trips();
+        } elseif (isset($parts[2]) && $parts[2] === 'history') {
+          handle_driver_trip_history();
+        }
+        break;
+      case 'emergency_requests':
+        if (isset($parts[2]) && $parts[2] === 'accept') {
+          handle_accept_emergency_request();
+        } else {
+          handle_driver_emergency_requests();
+        }
+        break;
+      case 'vehicle_status':
+        handle_driver_vehicle_status();
+        break;
+      case 'earnings':
+        handle_driver_earnings();
+        break;
+      case 'status':
+        if ($method === 'POST') {
+          handle_driver_status_update();
+        }
+        break;
+      default:
+        json_response(['error' => 'Driver endpoint not found'], 404);
+    }
+    break;
   case 'departments':
     if ($method === 'GET') {
       // /departments -> paginated derived departments
       if (!isset($parts[1])) handle_get_departments();
       // /departments/list -> full departments table (for registration dropdown)
       else if ($parts[1] === 'list') handle_get_departments_list();
+    }
+    break;
+  case 'patients':
+    if ($method === 'GET') {
+      // /patients -> list
+      if (!isset($parts[1])) handle_get_patients();
+      // /patients/get?id= -> single patient
+      else if ($parts[1] === 'get') handle_get_patient();
     }
     break;
   case 'users':
@@ -63,7 +109,35 @@ switch ($parts[0]) {
     if ($method === 'POST' && isset($parts[1]) && $parts[1] === 'register') {
       handle_auth_register();
     } elseif ($method === 'POST' && isset($parts[1]) && $parts[1] === 'login') {
-      handle_auth_login();
+      $userType = $parts[2] ?? null;
+
+      if (!$userType) {
+        json_response(['error' => 'User type not specified. Please provide a valid user type in the URL (e.g., /auth/login/driver).'], 400);
+      }
+
+      $validUserTypes = ['patient', 'doctor', 'nurse', 'driver', 'hospital_admin', 'compounder'];
+      if (!in_array($userType, $validUserTypes)) {
+        json_response(['error' => 'Invalid user type. Supported types: ' . implode(', ', $validUserTypes) . '.'], 400);
+      }
+
+      switch ($userType) {
+        case 'patient':
+          handle_patient_login();
+          break;
+        case 'doctor':
+          handle_doctor_login();
+          break;
+        case 'nurse':
+        case 'compounder': // Treat nurse and compounder as the same role
+          handle_nurse_login();
+          break;
+        case 'driver':
+          handle_driver_login();
+          break;
+        case 'hospital_admin':
+          handle_hospital_admin_login();
+          break;
+      }
     }
     break;
   default:
@@ -309,6 +383,49 @@ function handle_get_departments()
   ]);
 }
 
+// List patients (with optional pagination and search)
+function handle_get_patients()
+{
+  $pdo = get_db();
+  $q = isset($_GET['q']) ? trim($_GET['q']) : '';
+  $page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
+  $perPage = isset($_GET['per_page']) ? max(1, (int)$_GET['per_page']) : 20;
+  $offset = ($page - 1) * $perPage;
+
+  if ($q !== '') {
+    $stmt = $pdo->prepare('SELECT id, name, email, phone, gender, date_of_birth, created_at FROM users WHERE (name LIKE :q OR email LIKE :q) AND id IN (SELECT user_id FROM user_roles WHERE role_id = (SELECT id FROM roles WHERE name = "patient")) LIMIT :limit OFFSET :offset');
+    $stmt->bindValue(':q', "%$q%", PDO::PARAM_STR);
+  } else {
+    $stmt = $pdo->prepare('SELECT id, name, email, phone, gender, date_of_birth, created_at FROM users WHERE id IN (SELECT user_id FROM user_roles WHERE role_id = (SELECT id FROM roles WHERE name = "patient")) LIMIT :limit OFFSET :offset');
+  }
+  $stmt->bindValue(':limit', (int)$perPage, PDO::PARAM_INT);
+  $stmt->bindValue(':offset', (int)$offset, PDO::PARAM_INT);
+  $stmt->execute();
+  $rows = $stmt->fetchAll();
+
+  json_response(['patients' => $rows, 'page' => $page, 'per_page' => $perPage]);
+}
+
+// Get single patient details by id
+function handle_get_patient()
+{
+  $pdo = get_db();
+  $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+  if ($id <= 0) json_response(['error' => 'id required'], 400);
+
+  $stmt = $pdo->prepare('SELECT id, name, email, phone, gender, date_of_birth, created_at FROM users WHERE id = :id LIMIT 1');
+  $stmt->execute([':id' => $id]);
+  $user = $stmt->fetch();
+  if (!$user) json_response(['error' => 'not found'], 404);
+
+  // Fetch basic health records (example)
+  $rstmt = $pdo->prepare('SELECT id, type, summary, created_at FROM health_records WHERE patient_id = :pid ORDER BY created_at DESC LIMIT 20');
+  $rstmt->execute([':pid' => $id]);
+  $records = $rstmt->fetchAll();
+
+  json_response(['patient' => $user, 'records' => $records]);
+}
+
 function handle_get_users()
 {
   $pdo = get_db();
@@ -353,6 +470,126 @@ function handle_get_departments_list()
   json_response(['departments' => $stmt->fetchAll()]);
 }
 
+function handle_auth_register()
+{
+  try {
+    $pdo = get_db();
+    $input = json_decode(file_get_contents('php://input'), true);
+    if (!$input) json_response(['error' => 'Invalid JSON'], 400);
+
+    $role = isset($input['role']) ? $input['role'] : 'patient';
+    $name = isset($input['name']) ? trim($input['name']) : null; // full name (optional)
+    $email = isset($input['email']) ? trim($input['email']) : null;
+    $username = isset($input['username']) ? trim($input['username']) : null; // the actual login username
+    $password = isset($input['password']) ? $input['password'] : null;
+    $phone = isset($input['phone']) ? $input['phone'] : null;
+
+    // Require username and password. Full name is optional.
+    if (empty($username) || empty($password)) {
+      json_response(['error' => 'username and password are required'], 400);
+    }
+
+    // Check username uniqueness
+    $stmt = $pdo->prepare('SELECT id FROM users WHERE name = :username LIMIT 1');
+    $stmt->execute([':username' => $username]);
+    if ($stmt->fetch()) json_response(['error' => 'Username already exists'], 400);
+
+    // Check email uniqueness if provided
+    if (!empty($email)) {
+      $stmt = $pdo->prepare('SELECT id FROM users WHERE email = :email LIMIT 1');
+      $stmt->execute([':email' => $email]);
+      if ($stmt->fetch()) json_response(['error' => 'Email already exists'], 400);
+    }
+
+    // Create user. Store login 'username' into users.name so login works with username.
+    $dbName = $username; // use username as the users.name column
+    $hashed = password_hash($password, PASSWORD_DEFAULT);
+    $ins = $pdo->prepare('INSERT INTO users (name, email, password, phone, created_at) VALUES (:name, :email, :password, :phone, NOW())');
+    $ins->execute([':name' => $dbName, ':email' => $email, ':password' => $hashed, ':phone' => $phone]);
+    $user_id = (int)$pdo->lastInsertId();
+
+    // Attach role
+    $roleId = ensure_role_exists($role);
+    $rins = $pdo->prepare('INSERT INTO user_roles (user_id, role_id, created_at) VALUES (:user_id, :role_id, NOW())');
+    $rins->execute([':user_id' => $user_id, ':role_id' => $roleId]);
+
+    // If registering as doctor, create doctors record and accept BM&DC + department mapping
+    if ($role === 'doctor') {
+      $bmdc = isset($input['bmdc_code']) ? trim($input['bmdc_code']) : null;
+      $department_id = isset($input['department_id']) ? (int)$input['department_id'] : null;
+      $specialization = isset($input['specialization']) ? trim($input['specialization']) : null;
+
+      $dins = $pdo->prepare('INSERT INTO doctors (user_id, bmdc_code, specialization, created_at, updated_at) VALUES (:user_id, :bmdc, :spec, NOW(), NOW())');
+      $dins->execute([':user_id' => $user_id, ':bmdc' => $bmdc, ':spec' => $specialization]);
+      $doctor_id = (int)$pdo->lastInsertId();
+
+      if ($department_id) {
+        $m = $pdo->prepare('INSERT INTO doctor_departments (doctor_id, department_id, created_at) VALUES (:doctor_id, :department_id, NOW()) ON DUPLICATE KEY UPDATE department_id = VALUES(department_id)');
+        $m->execute([':doctor_id' => $doctor_id, ':department_id' => $department_id]);
+      }
+    }
+
+    // If registering as driver, create driver record
+    if ($role === 'driver') {
+      $license_number = isset($input['license_number']) ? trim($input['license_number']) : null;
+      $vehicle_id = isset($input['vehicle_id']) ? (int)$input['vehicle_id'] : null;
+
+      $dins = $pdo->prepare('INSERT INTO drivers (user_id, license_number, vehicle_id, created_at, updated_at) VALUES (:user_id, :license_number, :vehicle_id, NOW(), NOW())');
+      $dins->execute([':user_id' => $user_id, ':license_number' => $license_number, ':vehicle_id' => $vehicle_id]);
+      $driver_id = (int)$pdo->lastInsertId();
+    }
+
+    // If registering as nurse, create nurse record
+    if ($role === 'nurse') {
+      $license_number = isset($input['license_number']) ? trim($input['license_number']) : null;
+      $is_daycare = isset($input['is_daycare']) ? (int)$input['is_daycare'] : 0;
+      $is_compounder = isset($input['is_compounder']) ? (int)$input['is_compounder'] : 0;
+      $specialization = isset($input['specialization']) ? trim($input['specialization']) : null;
+
+      // NOTE: `nurses` table in this schema does not have a `department_id` column.
+      $nins = $pdo->prepare('INSERT INTO nurses (user_id, license_number, is_daycare, is_compounder, specialization, created_at, updated_at) VALUES (:user_id, :license_number, :is_daycare, :is_compounder, :specialization, NOW(), NOW())');
+      $nins->execute([
+        ':user_id' => $user_id,
+        ':license_number' => $license_number,
+        ':is_daycare' => $is_daycare,
+        ':is_compounder' => $is_compounder,
+        ':specialization' => $specialization
+      ]);
+      $nurse_id = (int)$pdo->lastInsertId();
+    }
+
+    // If registering as compounder, create nurse record with is_compounder=1
+    if ($role === 'compounder') {
+      $license_number = isset($input['license_number']) ? trim($input['license_number']) : null;
+      $specialization = isset($input['specialization']) ? trim($input['specialization']) : null;
+
+      $nins = $pdo->prepare('INSERT INTO nurses (user_id, license_number, is_compounder, specialization, created_at, updated_at) VALUES (:user_id, :license_number, 1, :specialization, NOW(), NOW())');
+      $nins->execute([
+        ':user_id' => $user_id,
+        ':license_number' => $license_number,
+        ':specialization' => $specialization
+      ]);
+      $nurse_id = (int)$pdo->lastInsertId();
+    }
+
+    // If registering as hospital_admin, create hospital_admin record
+    if ($role === 'hospital_admin') {
+      $hospital_id = isset($input['hospital_id']) ? (int)$input['hospital_id'] : null;
+
+      // The `hospital_admins` table uses `admin_id` (not `user_id`) for the user reference in this schema.
+      // Schema: (id, hospital_id, admin_id, created_at)
+      $hins = $pdo->prepare('INSERT INTO hospital_admins (hospital_id, admin_id, created_at) VALUES (:hospital_id, :admin_id, NOW()) ON DUPLICATE KEY UPDATE created_at = created_at');
+      $hins->execute([':hospital_id' => $hospital_id, ':admin_id' => $user_id]);
+      $admin_id = (int)$pdo->lastInsertId();
+    }
+
+    json_response(['message' => 'registered', 'user_id' => $user_id], 201);
+  } catch (PDOException $e) {
+    error_log("Registration error: " . $e->getMessage());
+    json_response(['error' => 'Registration failed: ' . $e->getMessage()], 500);
+  }
+}
+
 function ensure_role_exists($roleName)
 {
   $pdo = get_db();
@@ -365,59 +602,8 @@ function ensure_role_exists($roleName)
   return (int)$pdo->lastInsertId();
 }
 
-function handle_auth_register()
-{
-  $pdo = get_db();
-  $input = json_decode(file_get_contents('php://input'), true);
-  if (!$input) json_response(['error' => 'Invalid JSON'], 400);
-
-  $role = isset($input['role']) ? $input['role'] : 'patient';
-  $name = isset($input['name']) ? trim($input['name']) : null;
-  $email = isset($input['email']) ? trim($input['email']) : null;
-  $username = isset($input['username']) ? trim($input['username']) : null;
-  $password = isset($input['password']) ? $input['password'] : null;
-  $phone = isset($input['phone']) ? $input['phone'] : null;
-
-  if (empty($username) || empty($password) || empty($name)) {
-    json_response(['error' => 'name, username and password are required'], 400);
-  }
-
-  // Check username/email uniqueness
-  $stmt = $pdo->prepare('SELECT id FROM users WHERE email = :email OR name = :username LIMIT 1');
-  $stmt->execute([':email' => $email, ':username' => $username]);
-  if ($stmt->fetch()) json_response(['error' => 'User already exists with same username/email'], 400);
-
-  // Create user
-  $hashed = password_hash($password, PASSWORD_DEFAULT);
-  $ins = $pdo->prepare('INSERT INTO users (name, email, password, phone, created_at) VALUES (:name, :email, :password, :phone, NOW())');
-  $ins->execute([':name' => $username, ':email' => $email, ':password' => $hashed, ':phone' => $phone]);
-  $user_id = (int)$pdo->lastInsertId();
-
-  // Attach role
-  $roleId = ensure_role_exists($role);
-  $rins = $pdo->prepare('INSERT INTO user_roles (user_id, role_id, created_at) VALUES (:user_id, :role_id, NOW())');
-  $rins->execute([':user_id' => $user_id, ':role_id' => $roleId]);
-
-  // If registering as doctor, create doctors record and accept BM&DC + department mapping
-  if ($role === 'doctor') {
-    $bmdc = isset($input['bmdc_code']) ? trim($input['bmdc_code']) : null;
-    $department_id = isset($input['department_id']) ? (int)$input['department_id'] : null;
-    $specialization = isset($input['specialization']) ? trim($input['specialization']) : null;
-
-    $dins = $pdo->prepare('INSERT INTO doctors (user_id, bmdc_code, specialization, created_at, updated_at) VALUES (:user_id, :bmdc, :spec, NOW(), NOW())');
-    $dins->execute([':user_id' => $user_id, ':bmdc' => $bmdc, ':spec' => $specialization]);
-    $doctor_id = (int)$pdo->lastInsertId();
-
-    if ($department_id) {
-      $m = $pdo->prepare('INSERT INTO doctor_departments (doctor_id, department_id, created_at) VALUES (:doctor_id, :department_id) ON DUPLICATE KEY UPDATE department_id = VALUES(department_id)');
-      $m->execute([':doctor_id' => $doctor_id, ':department_id' => $department_id]);
-    }
-  }
-
-  json_response(['message' => 'registered', 'user_id' => $user_id], 201);
-}
-
-function handle_auth_login()
+// Patient Login Handler
+function handle_patient_login()
 {
   $pdo = get_db();
   $input = json_decode(file_get_contents('php://input'), true);
@@ -426,7 +612,9 @@ function handle_auth_login()
   $username = isset($input['username']) ? trim($input['username']) : null;
   $password = isset($input['password']) ? $input['password'] : null;
 
-  if (!$username || !$password) json_response(['error' => 'username and password required'], 400);
+  if (!$username || !$password) {
+    json_response(['error' => 'username and password required'], 400);
+  }
 
   $stmt = $pdo->prepare('SELECT id, name, email, password, profile_image FROM users WHERE name = :username OR email = :username LIMIT 1');
   $stmt->execute([':username' => $username]);
@@ -435,22 +623,306 @@ function handle_auth_login()
 
   if (!password_verify($password, $u['password'])) json_response(['error' => 'invalid credentials'], 401);
 
-  // Fetch role(s)
+  // Check if user has patient role
+  $rstmt = $pdo->prepare('SELECT r.name FROM user_roles ur JOIN roles r ON ur.role_id = r.id WHERE ur.user_id = :uid AND r.name = "patient"');
+  $rstmt->execute([':uid' => $u['id']]);
+  $role = $rstmt->fetchColumn();
+  if (!$role) json_response(['error' => 'You are not registered as a patient'], 403);
+
+  // Fetch all roles
   $rstmt = $pdo->prepare('SELECT r.name FROM user_roles ur JOIN roles r ON ur.role_id = r.id WHERE ur.user_id = :uid');
   $rstmt->execute([':uid' => $u['id']]);
   $roles = array_column($rstmt->fetchAll(), 'name');
 
-  // Start session and store minimal user info for header visibility
+  // Start session
   if (session_status() === PHP_SESSION_NONE) session_start();
+  session_regenerate_id(true);
+
   $_SESSION['user'] = [
     'id' => (int)$u['id'],
     'name' => $u['name'],
     'email' => $u['email'],
     'roles' => $roles,
+    'primary_role' => 'patient',
     'profile_image' => isset($u['profile_image']) ? $u['profile_image'] : null
   ];
 
-  json_response(['message' => 'ok', 'user' => $_SESSION['user']]);
+  json_response(['message' => 'ok', 'user' => $_SESSION['user'], 'redirect' => 'patient_dashboard.php']);
+}
+
+// Doctor Login Handler
+function handle_doctor_login()
+{
+  $pdo = get_db();
+  $input = json_decode(file_get_contents('php://input'), true);
+  if (!$input) json_response(['error' => 'Invalid JSON'], 400);
+
+  $username = isset($input['username']) ? trim($input['username']) : null;
+  $password = isset($input['password']) ? $input['password'] : null;
+
+  if (!$username || !$password) {
+    json_response(['error' => 'username and password required'], 400);
+  }
+
+  $stmt = $pdo->prepare('SELECT id, name, email, password, profile_image FROM users WHERE name = :username OR email = :username LIMIT 1');
+  $stmt->execute([':username' => $username]);
+  $u = $stmt->fetch();
+  if (!$u) json_response(['error' => 'invalid credentials'], 401);
+
+  if (!password_verify($password, $u['password'])) json_response(['error' => 'invalid credentials'], 401);
+
+  // Check if user has doctor role
+  $rstmt = $pdo->prepare('SELECT r.name FROM user_roles ur JOIN roles r ON ur.role_id = r.id WHERE ur.user_id = :uid AND r.name = "doctor"');
+  $rstmt->execute([':uid' => $u['id']]);
+  $role = $rstmt->fetchColumn();
+  if (!$role) json_response(['error' => 'You are not registered as a doctor'], 403);
+
+  // Fetch doctor verification status (allow login even if not verified)
+  $dstmt = $pdo->prepare('SELECT verification_status FROM doctors WHERE user_id = :uid');
+  $dstmt->execute([':uid' => $u['id']]);
+  $doctor = $dstmt->fetch();
+  if (!$doctor) {
+    json_response(['error' => 'Doctor record not found'], 403);
+  }
+  $is_verified = isset($doctor['verification_status']) && $doctor['verification_status'] === 'verified';
+
+  // Fetch all roles
+  $rstmt = $pdo->prepare('SELECT r.name FROM user_roles ur JOIN roles r ON ur.role_id = r.id WHERE ur.user_id = :uid');
+  $rstmt->execute([':uid' => $u['id']]);
+  $roles = array_column($rstmt->fetchAll(), 'name');
+
+  // Start session
+  if (session_status() === PHP_SESSION_NONE) session_start();
+  session_regenerate_id(true);
+
+  $_SESSION['user'] = [
+    'id' => (int)$u['id'],
+    'name' => $u['name'],
+    'email' => $u['email'],
+    'roles' => $roles,
+    'primary_role' => 'doctor',
+    'is_verified' => $is_verified,
+    'verification_status' => $doctor['verification_status'] ?? null,
+    'profile_image' => isset($u['profile_image']) ? $u['profile_image'] : null
+  ];
+
+  json_response(['message' => 'ok', 'user' => $_SESSION['user'], 'redirect' => 'doctor_dashboard.php']);
+}
+
+// Nurse Login Handler
+function handle_nurse_login()
+{
+  $pdo = get_db();
+  $input = json_decode(file_get_contents('php://input'), true);
+  if (!$input) json_response(['error' => 'Invalid JSON'], 400);
+
+  $username = isset($input['username']) ? trim($input['username']) : null;
+  $password = isset($input['password']) ? $input['password'] : null;
+
+  if (!$username || !$password) {
+    json_response(['error' => 'username and password required'], 400);
+  }
+
+  $stmt = $pdo->prepare('SELECT id, name, email, password, profile_image FROM users WHERE name = :username OR email = :username LIMIT 1');
+  $stmt->execute([':username' => $username]);
+  $u = $stmt->fetch();
+  if (!$u) json_response(['error' => 'invalid credentials'], 401);
+
+  if (!password_verify($password, $u['password'])) json_response(['error' => 'invalid credentials'], 401);
+
+  // Check if user has nurse role
+  $rstmt = $pdo->prepare('SELECT r.name FROM user_roles ur JOIN roles r ON ur.role_id = r.id WHERE ur.user_id = :uid AND r.name = "nurse"');
+  $rstmt->execute([':uid' => $u['id']]);
+  $role = $rstmt->fetchColumn();
+  if (!$role) json_response(['error' => 'You are not registered as a nurse'], 403);
+
+  // Fetch nurse verification status (allow login even if not verified)
+  $nstmt = $pdo->prepare('SELECT verification_status FROM nurses WHERE user_id = :uid');
+  $nstmt->execute([':uid' => $u['id']]);
+  $nurse = $nstmt->fetch();
+  if (!$nurse) {
+    json_response(['error' => 'Nurse record not found'], 403);
+  }
+  $is_verified = isset($nurse['verification_status']) && $nurse['verification_status'] === 'verified';
+
+  // Fetch all roles
+  $rstmt = $pdo->prepare('SELECT r.name FROM user_roles ur JOIN roles r ON ur.role_id = r.id WHERE ur.user_id = :uid');
+  $rstmt->execute([':uid' => $u['id']]);
+  $roles = array_column($rstmt->fetchAll(), 'name');
+
+  // Start session
+  if (session_status() === PHP_SESSION_NONE) session_start();
+  session_regenerate_id(true);
+
+  $_SESSION['user'] = [
+    'id' => (int)$u['id'],
+    'name' => $u['name'],
+    'email' => $u['email'],
+    'roles' => $roles,
+    'primary_role' => 'nurse',
+    'is_verified' => $is_verified,
+    'verification_status' => $nurse['verification_status'] ?? null,
+    'profile_image' => isset($u['profile_image']) ? $u['profile_image'] : null
+  ];
+
+  json_response(['message' => 'ok', 'user' => $_SESSION['user'], 'redirect' => 'nurse_dashboard.php']);
+}
+
+// Driver Login Handler
+function handle_driver_login()
+{
+  $pdo = get_db();
+  $input = json_decode(file_get_contents('php://input'), true);
+  if (!$input) json_response(['error' => 'Invalid JSON'], 400);
+
+  $username = isset($input['username']) ? trim($input['username']) : null;
+  $password = isset($input['password']) ? $input['password'] : null;
+
+  if (!$username || !$password) {
+    json_response(['error' => 'username and password required'], 400);
+  }
+
+  $stmt = $pdo->prepare('SELECT id, name, email, password, profile_image FROM users WHERE name = :username OR email = :username LIMIT 1');
+  $stmt->execute([':username' => $username]);
+  $u = $stmt->fetch();
+  if (!$u) json_response(['error' => 'invalid credentials'], 401);
+
+  if (!password_verify($password, $u['password'])) json_response(['error' => 'invalid credentials'], 401);
+
+  // Check if user has driver role
+  $rstmt = $pdo->prepare('SELECT r.name FROM user_roles ur JOIN roles r ON ur.role_id = r.id WHERE ur.user_id = :uid AND r.name = "driver"');
+  $rstmt->execute([':uid' => $u['id']]);
+  $role = $rstmt->fetchColumn();
+  if (!$role) json_response(['error' => 'You are not registered as a driver'], 403);
+
+  // Fetch all roles
+  $rstmt = $pdo->prepare('SELECT r.name FROM user_roles ur JOIN roles r ON ur.role_id = r.id WHERE ur.user_id = :uid');
+  $rstmt->execute([':uid' => $u['id']]);
+  $roles = array_column($rstmt->fetchAll(), 'name');
+
+  // Start session
+  if (session_status() === PHP_SESSION_NONE) session_start();
+  session_regenerate_id(true);
+
+  $_SESSION['user'] = [
+    'id' => (int)$u['id'],
+    'name' => $u['name'],
+    'email' => $u['email'],
+    'roles' => $roles,
+    'primary_role' => 'driver',
+    'profile_image' => isset($u['profile_image']) ? $u['profile_image'] : null
+  ];
+
+  json_response(['message' => 'ok', 'user' => $_SESSION['user'], 'redirect' => 'driver_dashboard.php']);
+}
+
+// Hospital Admin Login Handler
+function handle_hospital_admin_login()
+{
+  $pdo = get_db();
+  $input = json_decode(file_get_contents('php://input'), true);
+  if (!$input) json_response(['error' => 'Invalid JSON'], 400);
+
+  $username = isset($input['username']) ? trim($input['username']) : null;
+  $password = isset($input['password']) ? $input['password'] : null;
+
+  if (!$username || !$password) {
+    json_response(['error' => 'username and password required'], 400);
+  }
+
+  $stmt = $pdo->prepare('SELECT id, name, email, password, profile_image FROM users WHERE name = :username OR email = :username LIMIT 1');
+  $stmt->execute([':username' => $username]);
+  $u = $stmt->fetch();
+  if (!$u) json_response(['error' => 'invalid credentials'], 401);
+
+  if (!password_verify($password, $u['password'])) json_response(['error' => 'invalid credentials'], 401);
+
+  // Check if user has hospital_admin role
+  $rstmt = $pdo->prepare('SELECT r.name FROM user_roles ur JOIN roles r ON ur.role_id = r.id WHERE ur.user_id = :uid AND r.name = "hospital_admin"');
+  $rstmt->execute([':uid' => $u['id']]);
+  $role = $rstmt->fetchColumn();
+  if (!$role) json_response(['error' => 'You are not registered as a hospital admin'], 403);
+
+  // Fetch all roles
+  $rstmt = $pdo->prepare('SELECT r.name FROM user_roles ur JOIN roles r ON ur.role_id = r.id WHERE ur.user_id = :uid');
+  $rstmt->execute([':uid' => $u['id']]);
+  $roles = array_column($rstmt->fetchAll(), 'name');
+
+  // Start session
+  if (session_status() === PHP_SESSION_NONE) session_start();
+  session_regenerate_id(true);
+
+  $_SESSION['user'] = [
+    'id' => (int)$u['id'],
+    'name' => $u['name'],
+    'email' => $u['email'],
+    'roles' => $roles,
+    'primary_role' => 'hospital_admin',
+    'profile_image' => isset($u['profile_image']) ? $u['profile_image'] : null
+  ];
+
+  json_response(['message' => 'ok', 'user' => $_SESSION['user'], 'redirect' => 'hospital_admin.php']);
+}
+
+// Compounder Login Handler
+function handle_compounder_login()
+{
+  $pdo = get_db();
+  $input = json_decode(file_get_contents('php://input'), true);
+  if (!$input) json_response(['error' => 'Invalid JSON'], 400);
+
+  $username = isset($input['username']) ? trim($input['username']) : null;
+  $password = isset($input['password']) ? $input['password'] : null;
+
+  if (!$username || !$password) {
+    json_response(['error' => 'username and password required'], 400);
+  }
+
+  $stmt = $pdo->prepare('SELECT id, name, email, password, profile_image FROM users WHERE name = :username OR email = :username LIMIT 1');
+  $stmt->execute([':username' => $username]);
+  $u = $stmt->fetch();
+  if (!$u) json_response(['error' => 'invalid credentials'], 401);
+
+  if (!password_verify($password, $u['password'])) json_response(['error' => 'invalid credentials'], 401);
+
+  // Fetch all roles
+  $rstmt = $pdo->prepare('SELECT r.name FROM user_roles ur JOIN roles r ON ur.role_id = r.id WHERE ur.user_id = :uid');
+  $rstmt->execute([':uid' => $u['id']]);
+  $roles = array_column($rstmt->fetchAll(), 'name');
+
+  // Check if user is a nurse or compounder
+  $is_compounder_or_nurse = in_array('compounder', $roles) || in_array('nurse', $roles);
+
+  if ($is_compounder_or_nurse) {
+    $nstmt = $pdo->prepare('SELECT verification_status, is_compounder FROM nurses WHERE user_id = :uid');
+    $nstmt->execute([':uid' => $u['id']]);
+    $nurse = $nstmt->fetch();
+
+    if (!$nurse || !$nurse['is_compounder']) {
+      json_response(['error' => 'Your compounder/nurse account is not properly set up'], 403);
+    }
+
+    // Allow compounder to login even if not verified; expose verification status
+    $is_verified = isset($nurse['verification_status']) && $nurse['verification_status'] === 'verified';
+    $primary_role = 'compounder';
+  } else {
+    $primary_role = $roles[0] ?? 'user';
+  }
+
+  // Start session
+  if (session_status() === PHP_SESSION_NONE) session_start();
+  session_regenerate_id(true);
+
+  $_SESSION['user'] = [
+    'id' => (int)$u['id'],
+    'name' => $u['name'],
+    'email' => $u['email'],
+    'roles' => $roles,
+    'primary_role' => $primary_role,
+    'profile_image' => isset($u['profile_image']) ? $u['profile_image'] : null
+  ];
+
+  json_response(['message' => 'ok', 'user' => $_SESSION['user'], 'redirect' => $primary_role . '.php']);
 }
 
 function handle_user_upload()
@@ -516,14 +988,25 @@ function handle_register_doctor()
 
   if (empty($user_id) && empty($input['name'])) json_response(['error' => 'user_id or name is required'], 400);
 
-  // If user_id not provided, create user
+  // If user_id not provided, create user. Require username and password for login.
   if (empty($user_id)) {
-    $sql = 'INSERT INTO users (name, email, phone, created_at) VALUES (:name, :email, :phone, NOW())';
+    $username = isset($input['username']) ? trim($input['username']) : null;
+    $password = isset($input['password']) ? $input['password'] : null;
+    $email = isset($input['email']) ? trim($input['email']) : null;
+    $phone = isset($input['phone']) ? $input['phone'] : null;
+
+    if (empty($username) || empty($password)) {
+      json_response(['error' => 'username and password are required when creating a new user'], 400);
+    }
+
+    $hashed = password_hash($password, PASSWORD_DEFAULT);
+    $sql = 'INSERT INTO users (name, email, password, phone, created_at) VALUES (:name, :email, :password, :phone, NOW())';
     $stmt = $pdo->prepare($sql);
     $stmt->execute([
-      ':name' => $input['name'],
-      ':email' => isset($input['email']) ? $input['email'] : null,
-      ':phone' => isset($input['phone']) ? $input['phone'] : null
+      ':name' => $username,
+      ':email' => $email,
+      ':password' => $hashed,
+      ':phone' => $phone
     ]);
     $user_id = (int)$pdo->lastInsertId();
   }
@@ -559,4 +1042,168 @@ function handle_register_doctor()
   }
 
   json_response(['message' => 'Doctor registered', 'doctor_id' => $doctor_id, 'user_id' => $user_id], 201);
+}
+
+// Driver trips functions
+function handle_driver_active_trips()
+{
+  $pdo = get_db();
+
+  // In a real application, you would get the driver ID from the session
+  // For now, we'll use a hardcoded ID
+  $driver_id = 1; // This should come from the session
+
+  $stmt = $pdo->prepare('SELECT COUNT(*) as count FROM driver_trips WHERE driver_id = ? AND status IN ("accepted", "in_progress")');
+  $stmt->execute([$driver_id]);
+  $result = $stmt->fetch();
+
+  json_response(['count' => (int)$result['count']]);
+}
+
+function handle_driver_completed_trips()
+{
+  $pdo = get_db();
+
+  // In a real application, you would get the driver ID from the session
+  // For now, we'll use a hardcoded ID
+  $driver_id = 1; // This should come from the session
+
+  $stmt = $pdo->prepare('SELECT COUNT(*) as count FROM driver_trips WHERE driver_id = ? AND status = "completed"');
+  $stmt->execute([$driver_id]);
+  $result = $stmt->fetch();
+
+  json_response(['count' => (int)$result['count']]);
+}
+
+function handle_driver_trip_history()
+{
+  $pdo = get_db();
+
+  // In a real application, you would get the driver ID from the session
+  // For now, we'll use a hardcoded ID
+  $driver_id = 1; // This should come from the session
+
+  $stmt = $pdo->prepare('SELECT pickup, destination, distance, duration FROM driver_trips WHERE driver_id = ? AND status = "completed" ORDER BY completed_at DESC LIMIT 4');
+  $stmt->execute([$driver_id]);
+  $trips = $stmt->fetchAll();
+
+  json_response(['trips' => $trips]);
+}
+
+function handle_driver_emergency_requests()
+{
+  $pdo = get_db();
+
+  $stmt = $pdo->query('SELECT er.id, u.name as patient_name, u.gender, er.location, h.name as hospital_name, er.priority 
+                         FROM emergency_requests er
+                         JOIN users u ON er.patient_id = u.id
+                         JOIN hospitals h ON er.hospital_id = h.id
+                         WHERE er.status = "pending"
+                         ORDER BY er.priority DESC, er.created_at ASC');
+  $requests = $stmt->fetchAll();
+
+  json_response([
+    'count' => count($requests),
+    'requests' => $requests
+  ]);
+}
+
+function handle_accept_emergency_request()
+{
+  $pdo = get_db();
+  $input = json_decode(file_get_contents('php://input'), true);
+
+  if (empty($input['request_id'])) {
+    json_response(['error' => 'Request ID is required'], 400);
+  }
+
+  $request_id = (int)$input['request_id'];
+  $driver_id = 1; // This should come from the session
+
+  // Update emergency request status
+  $stmt = $pdo->prepare('UPDATE emergency_requests SET status = "accepted", driver_id = ? WHERE id = ?');
+  $stmt->execute([$driver_id, $request_id]);
+
+  // Create a new trip for this emergency request
+  $stmt = $pdo->prepare('INSERT INTO driver_trips (driver_id, patient_id, hospital_id, pickup_location, status, created_at) 
+                           VALUES (?, (SELECT patient_id FROM emergency_requests WHERE id = ?), (SELECT hospital_id FROM emergency_requests WHERE id = ?), (SELECT location FROM emergency_requests WHERE id = ?), "accepted", NOW())');
+  $stmt->execute([$driver_id, $request_id, $request_id, $request_id]);
+
+  json_response(['message' => 'Emergency request accepted']);
+}
+
+function handle_driver_vehicle_status()
+{
+  $pdo = get_db();
+
+  // In a real application, you would get the driver ID from the session
+  // For now, we'll use a hardcoded ID
+  $driver_id = 1; // This should come from the session
+
+  $stmt = $pdo->prepare('SELECT fuel_level, odometer, condition, DATEDIFF(next_service_date, CURDATE()) as days_until_service 
+                           FROM vehicles WHERE driver_id = ?');
+  $stmt->execute([$driver_id]);
+  $vehicle = $stmt->fetch();
+
+  if (!$vehicle) {
+    json_response(['error' => 'Vehicle not found'], 404);
+  }
+
+  json_response($vehicle);
+}
+
+function handle_driver_earnings()
+{
+  $pdo = get_db();
+
+  // In a real application, you would get the driver ID from the session
+  // For now, we'll use a hardcoded ID
+  $driver_id = 1; // This should come from the session
+
+  // This week's earnings
+  $stmt = $pdo->prepare('SELECT SUM(fare) as total FROM driver_trips 
+                           WHERE driver_id = ? AND status = "completed" 
+                           AND completed_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)');
+  $stmt->execute([$driver_id]);
+  $this_week = $stmt->fetchColumn();
+
+  // Today's earnings
+  $stmt = $pdo->prepare('SELECT SUM(fare) as total FROM driver_trips 
+                           WHERE driver_id = ? AND status = "completed" 
+                           AND DATE(completed_at) = CURDATE()');
+  $stmt->execute([$driver_id]);
+  $today = $stmt->fetchColumn();
+
+  // Current trip earnings
+  $stmt = $pdo->prepare('SELECT fare FROM driver_trips 
+                           WHERE driver_id = ? AND status = "in_progress"');
+  $stmt->execute([$driver_id]);
+  $current_trip = $stmt->fetchColumn();
+
+  json_response([
+    'this_week' => (float)$this_week,
+    'today' => (float)$today,
+    'current_trip' => (float)$current_trip
+  ]);
+}
+
+function handle_driver_status_update()
+{
+  $pdo = get_db();
+  $input = json_decode(file_get_contents('php://input'), true);
+
+  if (empty($input['status']) || !in_array($input['status'], ['online', 'offline'])) {
+    json_response(['error' => 'Valid status (online/offline) is required'], 400);
+  }
+
+  $driver_id = 1; // This should come from the session
+  $status = $input['status'];
+
+  // Update driver status
+  $stmt = $pdo->prepare('INSERT INTO driver_status (driver_id, status, updated_at) 
+                           VALUES (?, ?, NOW()) 
+                           ON DUPLICATE KEY UPDATE status = VALUES(status), updated_at = NOW()');
+  $stmt->execute([$driver_id, $status]);
+
+  json_response(['message' => 'Status updated successfully']);
 }

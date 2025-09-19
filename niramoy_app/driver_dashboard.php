@@ -1,16 +1,3 @@
-<?php
-session_start();
-require_once __DIR__ . '/inc/config.php';
-require_once __DIR__ . '/inc/db.php';
-
-// Check if user is logged in and has driver role
-if (!isset($_SESSION['user']) || !in_array('driver', $_SESSION['user']['roles'])) {
-  header('Location: auth.php');
-  exit;
-}
-
-$driver_id = $_SESSION['user']['id'];
-?>
 <!DOCTYPE html>
 <html lang="en">
 
@@ -1324,7 +1311,7 @@ $driver_id = $_SESSION['user']['id'];
                 <li>
                   <hr class="dropdown-divider">
                 </li>
-                <li><a class="dropdown-item" href="auth.php"><i class="fas fa-sign-out-alt me-2"></i> <span class="lang-text en">Logout</span><span class="lang-text bn">লগআউট</span></a></li>
+                <li><a class="dropdown-item" href="logout.php"><i class="fas fa-sign-out-alt me-2"></i> <span class="lang-text en">Logout</span><span class="lang-text bn">লগআউট</span></a></li>
               </ul>
             </div>
           </div>
@@ -1363,20 +1350,21 @@ $driver_id = $_SESSION['user']['id'];
         <li>
           <hr class="dropdown-divider">
         </li>
-        <!-- Hide Navigation removed: navigation is always visible -->
+        <!-- Hide navigation removed; navigation always visible -->
       </ul>
     </nav>
     <div class="sidebar-footer">
-      <a href="auth.php"><i class="fas fa-sign-out-alt"></i> <span class="lang-text en">Logout</span><span class="lang-text bn">লগআউট</span></a>
+      <a href="logout.php"><i class="fas fa-sign-out-alt"></i> <span class="lang-text en">Logout</span><span class="lang-text bn">লগআউট</span></a>
     </div>
   </aside>
   <!-- Overlay -->
   <div class="overlay" id="overlay" aria-label="Sidebar overlay"></div>
-  <!-- Navigation hide/show controls removed (navigation always visible) -->
+  <!-- Navigation hide/show removed globally; navigation always visible -->
   <!-- Main Content -->
   <main class="main-content" id="mainContent">
     <div class="d-flex justify-content-between align-items-center mb-4">
       <h1><span class="lang-text en">Driver Dashboard</span><span class="lang-text bn">ড্রাইভার ড্যাশবোর্ড</span></h1>
+      <!-- Hide navigation removed; navigation always visible -->
     </div>
     <!-- Map Section -->
     <div class="content-section">
@@ -1424,7 +1412,7 @@ $driver_id = $_SESSION['user']['id'];
         </div>
         <div class="card-title"><span class="lang-text en">Active Trips</span><span class="lang-text bn">সক্রিয় ট্রিপ</span></div>
         <div class="card-value">1</div>
-        <a href="#" class="card-link"><span class="lang-text en">View All</span><span class="lang-text bn">সব দেখুন</span> <i class="fas fa-arrow-right"></i></a>
+        <a href="trips.php" class="card-link"><span class="lang-text en">View All</span><span class="lang-text bn">সব দেখুন</span> <i class="fas fa-arrow-right"></i></a>
       </div>
       <div class="dashboard-card success">
         <div class="card-icon success">
@@ -1432,7 +1420,7 @@ $driver_id = $_SESSION['user']['id'];
         </div>
         <div class="card-title"><span class="lang-text en">Completed Trips</span><span class="lang-text bn">সম্পন্ন ট্রিপ</span></div>
         <div class="card-value">28</div>
-        <a href="#" class="card-link"><span class="lang-text en">View All</span><span class="lang-text bn">সব দেখুন</span> <i class="fas fa-arrow-right"></i></a>
+        <a href="trip_history.php" class="card-link"><span class="lang-text en">View All</span><span class="lang-text bn">সব দেখুন</span> <i class="fas fa-arrow-right"></i></a>
       </div>
       <div class="dashboard-card danger">
         <div class="card-icon danger">
@@ -1440,7 +1428,7 @@ $driver_id = $_SESSION['user']['id'];
         </div>
         <div class="card-title"><span class="lang-text en">Emergency Alerts</span><span class="lang-text bn">জরুরি সতর্কতা</span></div>
         <div class="card-value">2</div>
-        <a href="#" class="card-link"><span class="lang-text en">View All</span><span class="lang-text bn">সব দেখুন</span> <i class="fas fa-arrow-right"></i></a>
+        <a href="emergencies.php" class="card-link"><span class="lang-text en">View All</span><span class="lang-text bn">সব দেখুন</span> <i class="fas fa-arrow-right"></i></a>
       </div>
       <div class="dashboard-card warning">
         <div class="card-icon warning">
@@ -1448,7 +1436,7 @@ $driver_id = $_SESSION['user']['id'];
         </div>
         <div class="card-title"><span class="lang-text en">Fuel Level</span><span class="lang-text bn">জ্বালানি স্তর</span></div>
         <div class="card-value">75%</div>
-        <a href="#" class="card-link"><span class="lang-text en">Refuel</span><span class="lang-text bn">জ্বালানি নিন</span> <i class="fas fa-arrow-right"></i></a>
+        <a href="vehicle_status.php" class="card-link"><span class="lang-text en">Refuel</span><span class="lang-text bn">জ্বালানি নিন</span> <i class="fas fa-arrow-right"></i></a>
       </div>
     </div>
     <!-- Earnings Summary -->
@@ -1459,7 +1447,7 @@ $driver_id = $_SESSION['user']['id'];
           <span class="lang-text en">Earnings Summary</span>
           <span class="lang-text bn">আয় সারসংক্ষেপ</span>
         </h2>
-        <a href="#" class="section-link">
+        <a href="earnings.php" class="section-link">
           <span class="lang-text en">View Details</span>
           <span class="lang-text bn">বিস্তারিত দেখুন</span>
           <i class="fas fa-arrow-right"></i>
@@ -1729,9 +1717,7 @@ $driver_id = $_SESSION['user']['id'];
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
-    // Set driver ID from PHP session
-    const driverId = <?php echo $driver_id; ?>;
-
+    // Wait for the DOM to be fully loaded
     document.addEventListener('DOMContentLoaded', function() {
       // Get all the elements
       const menuToggle = document.getElementById('menuToggle');
@@ -1741,22 +1727,63 @@ $driver_id = $_SESSION['user']['id'];
       const topHeader = document.getElementById('topHeader');
       const mainHeader = document.getElementById('mainHeader');
       const mainContent = document.getElementById('mainContent');
+      // hide/show navigation removed — navigation always visible
       const langToggle = document.getElementById('langToggle');
       const driverStatus = document.getElementById('driverStatus');
       const centerMapBtn = document.getElementById('centerMap');
       const trafficToggleBtn = document.getElementById('trafficToggle');
 
-      // Dashboard elements
-      const activeTripsElement = document.querySelector('.dashboard-card.primary .card-value');
-      const completedTripsElement = document.querySelector('.dashboard-card.success .card-value');
-      const emergencyAlertsElement = document.querySelector('.dashboard-card.danger .card-value');
-      const fuelLevelElement = document.querySelector('.dashboard-card.warning .card-value');
-      const earningsThisWeekElement = document.querySelector('.earnings-item:nth-child(1) .earnings-value');
-      const earningsTodayElement = document.querySelector('.earnings-item:nth-child(2) .earnings-value');
-      const earningsCurrentTripElement = document.querySelector('.earnings-item:nth-child(3) .earnings-value');
-      const emergencyListElement = document.querySelector('.emergency-list');
-      const vehicleStatusElements = document.querySelectorAll('.vehicle-card');
-      const tripHistoryElement = document.querySelector('.trip-history');
+      // Function to open sidebar
+      function openSidebar() {
+        sidebar.classList.add('active');
+        overlay.classList.add('active');
+        document.body.style.overflow = 'hidden'; // Prevent scrolling when sidebar is open
+      }
+
+      // Function to close sidebar
+      function closeSidebarFunc() {
+        sidebar.classList.remove('active');
+        overlay.classList.remove('active');
+        document.body.style.overflow = 'auto'; // Restore scrolling
+      }
+
+
+      // Add event listener to menu toggle button
+      if (menuToggle) {
+        menuToggle.addEventListener('click', openSidebar);
+      }
+
+      // Add event listener to close sidebar button
+      if (closeSidebar) {
+        closeSidebar.addEventListener('click', closeSidebarFunc);
+      }
+
+      // Add event listener to overlay
+      if (overlay) {
+        overlay.addEventListener('click', closeSidebarFunc);
+      }
+
+      // hide/show navigation removed — navigation always visible
+
+      // Language toggle functionality
+      if (langToggle) {
+        langToggle.addEventListener('click', function() {
+          document.body.classList.toggle('bn');
+        });
+      }
+
+      // Driver status toggle functionality
+      if (driverStatus) {
+        driverStatus.addEventListener('click', function() {
+          this.classList.toggle('offline');
+          const isBangla = document.body.classList.contains('bn');
+          if (this.classList.contains('offline')) {
+            this.innerHTML = '<i class="fas fa-circle me-2"></i><span class="lang-text en">Offline</span><span class="lang-text bn">অফলাইন</span>';
+          } else {
+            this.innerHTML = '<i class="fas fa-circle me-2"></i><span class="lang-text en">Online</span><span class="lang-text bn">অনলাইন</span>';
+          }
+        });
+      }
 
       // Initialize map
       let map;
@@ -1764,7 +1791,6 @@ $driver_id = $_SESSION['user']['id'];
       let destinationMarker;
       let routeLine;
 
-      // Initialize the map
       function initMap() {
         // Initialize the map centered on Dhaka
         map = L.map('map').setView([23.8103, 90.4125], 13);
@@ -1821,362 +1847,6 @@ $driver_id = $_SESSION['user']['id'];
         destinationMarker.bindPopup('<b><span class="lang-text en">United Hospital</span><span class="lang-text bn">ইউনাইটেড হাসপাতাল</span></b>');
       }
 
-      // Fetch driver dashboard data from API
-      async function fetchDriverData() {
-        try {
-          // Get driver's active trips
-          const activeTripsResponse = await fetch(`api.php?q=driver/trips/active&driver_id=${driverId}`);
-          const activeTripsData = await activeTripsResponse.json();
-
-          // Get driver's completed trips
-          const completedTripsResponse = await fetch(`api.php?q=driver/trips/completed&driver_id=${driverId}`);
-          const completedTripsData = await completedTripsResponse.json();
-
-          // Get emergency requests
-          const emergencyResponse = await fetch(`api.php?q=driver/emergency_requests&driver_id=${driverId}`);
-          const emergencyData = await emergencyResponse.json();
-
-          // Get vehicle status
-          const vehicleResponse = await fetch(`api.php?q=driver/vehicle_status&driver_id=${driverId}`);
-          const vehicleData = await vehicleResponse.json();
-
-          // Get earnings
-          const earningsResponse = await fetch(`api.php?q=driver/earnings&driver_id=${driverId}`);
-          const earningsData = await earningsResponse.json();
-
-          // Get trip history
-          const historyResponse = await fetch(`api.php?q=driver/trip_history&driver_id=${driverId}`);
-          const historyData = await historyResponse.json();
-
-          // Update dashboard with fetched data
-          updateDashboard(activeTripsData, completedTripsData, emergencyData, vehicleData, earningsData, historyData);
-
-        } catch (error) {
-          console.error('Error fetching driver data:', error);
-          // Fallback to sample data if API fails
-          loadSampleData();
-        }
-      }
-
-      // Update dashboard with fetched data
-      function updateDashboard(activeTrips, completedTrips, emergencyRequests, vehicleStatus, earnings, tripHistory) {
-        // Update trip counts
-        if (activeTrips && activeTrips.count !== undefined) {
-          activeTripsElement.textContent = activeTrips.count;
-        }
-
-        if (completedTrips && completedTrips.count !== undefined) {
-          completedTripsElement.textContent = completedTrips.count;
-        }
-
-        // Update emergency alerts
-        if (emergencyRequests && emergencyRequests.count !== undefined) {
-          emergencyAlertsElement.textContent = emergencyRequests.count;
-        }
-
-        // Update vehicle status
-        if (vehicleStatus) {
-          if (vehicleStatus.fuel_level !== undefined) {
-            fuelLevelElement.textContent = vehicleStatus.fuel_level + '%';
-            updateGauge(0, vehicleStatus.fuel_level);
-          }
-
-          if (vehicleStatus.odometer !== undefined) {
-            updateGauge(1, Math.min(100, vehicleStatus.odometer / 1000)); // Convert to percentage
-          }
-
-          if (vehicleStatus.vehicle_condition !== undefined) {
-            const conditionValue = vehicleStatus.vehicle_condition === 'excellent' ? 100 :
-              vehicleStatus.vehicle_condition === 'good' ? 75 :
-              vehicleStatus.vehicle_condition === 'fair' ? 50 : 25;
-            updateGauge(2, conditionValue);
-          }
-
-          if (vehicleStatus.days_until_service !== undefined) {
-            const serviceValue = Math.min(100, vehicleStatus.days_until_service * 5); // Scale to percentage
-            updateGauge(3, serviceValue);
-          }
-        }
-
-        // Update earnings
-        if (earnings) {
-          if (earnings.this_week !== undefined) {
-            earningsThisWeekElement.textContent = '৳' + earnings.this_week;
-          }
-
-          if (earnings.today !== undefined) {
-            earningsTodayElement.textContent = '৳' + earnings.today;
-          }
-
-          if (earnings.current_trip !== undefined) {
-            earningsCurrentTripElement.textContent = '৳' + earnings.current_trip;
-          }
-        }
-
-        // Update emergency requests list
-        if (emergencyRequests && emergencyRequests.requests) {
-          emergencyListElement.innerHTML = '';
-          emergencyRequests.requests.forEach(request => {
-            const priorityClass = request.priority === 'critical' ? 'priority-critical' :
-              request.priority === 'urgent' ? 'priority-urgent' : 'priority-normal';
-
-            const li = document.createElement('li');
-            li.className = 'emergency-item';
-            li.innerHTML = `
-                            <img src="${request.patient_image || 'https://randomuser.me/api/portraits/' + (request.gender === 'male' ? 'men' : 'women') + '/' + request.id + '.jpg'}" alt="Patient" class="emergency-patient">
-                            <div class="emergency-details">
-                                <div class="emergency-patient-name">${request.patient_name}</div>
-                                <div class="emergency-info"><i class="fas fa-map-marker-alt"></i> ${request.location}</div>
-                                <div class="emergency-info"><i class="fas fa-hospital"></i> ${request.hospital_name}</div>
-                            </div>
-                            <span class="emergency-priority ${priorityClass}">${request.priority}</span>
-                            <div class="emergency-actions">
-                                <button class="emergency-action-btn btn-accept" data-id="${request.id}">Accept</button>
-                            </div>
-                        `;
-            emergencyListElement.appendChild(li);
-          });
-
-          // Add event listeners to accept buttons
-          document.querySelectorAll('.btn-accept').forEach(button => {
-            button.addEventListener('click', function() {
-              const requestId = this.getAttribute('data-id');
-              acceptEmergencyRequest(requestId);
-            });
-          });
-        }
-
-        // Update trip history
-        if (tripHistory && tripHistory.trips) {
-          tripHistoryElement.innerHTML = '';
-          tripHistory.trips.forEach(trip => {
-            const div = document.createElement('div');
-            div.className = 'trip-card';
-            div.innerHTML = `
-                            <div class="trip-icon">
-                                <i class="fas fa-map-marker-alt"></i>
-                            </div>
-                            <div class="trip-title">${trip.pickup} to ${trip.destination}</div>
-                            <div class="trip-details">Distance: ${trip.distance} km</div>
-                            <div class="trip-details">Time: ${trip.duration}</div>
-                        `;
-            tripHistoryElement.appendChild(div);
-          });
-        }
-      }
-
-      // Update gauge value
-      function updateGauge(index, percentage) {
-        if (vehicleStatusElements[index]) {
-          const gaugeFill = vehicleStatusElements[index].querySelector('.gauge-fill');
-          const gaugeValue = vehicleStatusElements[index].querySelector('.gauge-value');
-
-          if (gaugeFill) {
-            gaugeFill.style.setProperty('--percentage', percentage + '%');
-          }
-
-          if (gaugeValue) {
-            if (index === 0) {
-              gaugeValue.textContent = Math.round(percentage) + '%';
-            } else if (index === 1) {
-              gaugeValue.textContent = Math.round(percentage * 1000) + 'K';
-            } else if (index === 2) {
-              gaugeValue.textContent = percentage > 75 ? 'Excellent' :
-                percentage > 50 ? 'Good' :
-                percentage > 25 ? 'Fair' : 'Poor';
-            } else if (index === 3) {
-              gaugeValue.textContent = Math.round(percentage / 5) + 'd';
-            }
-          }
-        }
-      }
-
-      // Accept emergency request
-      async function acceptEmergencyRequest(requestId) {
-        try {
-          const response = await fetch('api.php?q=driver/emergency_requests/accept', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              request_id: requestId,
-              driver_id: driverId
-            })
-          });
-
-          const data = await response.json();
-
-          if (response.ok) {
-            alert('Emergency request accepted successfully!');
-            fetchDriverData(); // Refresh dashboard data
-          } else {
-            alert('Error accepting request: ' + (data.error || 'Unknown error'));
-          }
-        } catch (error) {
-          console.error('Error accepting emergency request:', error);
-          alert('Error accepting request. Please try again.');
-        }
-      }
-
-      // Load sample data if API fails
-      function loadSampleData() {
-        // This is a fallback with sample data
-        const sampleData = {
-          activeTrips: {
-            count: 1
-          },
-          completedTrips: {
-            count: 28
-          },
-          emergencyRequests: {
-            count: 2,
-            requests: [{
-                id: 1,
-                patient_name: 'Fatima Rahman',
-                gender: 'female',
-                location: 'Dhanmondi, Dhaka',
-                hospital_name: 'United Hospital',
-                priority: 'critical'
-              },
-              {
-                id: 2,
-                patient_name: 'Mohammad Ali',
-                gender: 'male',
-                location: 'Gulshan, Dhaka',
-                hospital_name: 'Popular Diagnostic',
-                priority: 'urgent'
-              }
-            ]
-          },
-          vehicleStatus: {
-            fuel_level: 75,
-            odometer: 45000,
-            vehicle_condition: 'good',
-            days_until_service: 15
-          },
-          earnings: {
-            this_week: 15000,
-            today: 3500,
-            current_trip: 800
-          },
-          tripHistory: {
-            trips: [{
-                pickup: 'Mirpur',
-                destination: 'Dhanmondi',
-                distance: '12',
-                duration: '25 mins'
-              },
-              {
-                pickup: 'Uttara',
-                destination: 'Gulshan',
-                distance: '18',
-                duration: '35 mins'
-              },
-              {
-                pickup: 'Mohakhali',
-                destination: 'Banani',
-                distance: '8',
-                duration: '20 mins'
-              },
-              {
-                pickup: 'Farmgate',
-                destination: 'Shahbag',
-                distance: '6',
-                duration: '15 mins'
-              }
-            ]
-          }
-        };
-
-        updateDashboard(
-          sampleData.activeTrips,
-          sampleData.completedTrips,
-          sampleData.emergencyRequests,
-          sampleData.vehicleStatus,
-          sampleData.earnings,
-          sampleData.tripHistory
-        );
-      }
-
-      // Function to open sidebar
-      function openSidebar() {
-        sidebar.classList.add('active');
-        overlay.classList.add('active');
-        document.body.style.overflow = 'hidden'; // Prevent scrolling when sidebar is open
-      }
-
-      // Function to close sidebar
-      function closeSidebarFunc() {
-        sidebar.classList.remove('active');
-        overlay.classList.remove('active');
-        document.body.style.overflow = 'auto'; // Restore scrolling
-      }
-
-
-      // Add event listener to menu toggle button
-      if (menuToggle) {
-        menuToggle.addEventListener('click', openSidebar);
-      }
-
-      // Add event listener to close sidebar button
-      if (closeSidebar) {
-        closeSidebar.addEventListener('click', closeSidebarFunc);
-      }
-
-      // Add event listener to overlay
-      if (overlay) {
-        overlay.addEventListener('click', closeSidebarFunc);
-      }
-
-
-      // Language toggle functionality
-      if (langToggle) {
-        langToggle.addEventListener('click', function() {
-          document.body.classList.toggle('bn');
-        });
-      }
-
-      // Driver status toggle functionality
-      if (driverStatus) {
-        driverStatus.addEventListener('click', async function() {
-          this.classList.toggle('offline');
-          const isBangla = document.body.classList.contains('bn');
-          const newStatus = this.classList.contains('offline') ? 'offline' : 'online';
-
-          // Update driver status in the backend
-          try {
-            const response = await fetch('api.php?q=driver/status', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({
-                status: newStatus,
-                driver_id: driverId
-              })
-            });
-
-            if (response.ok) {
-              if (this.classList.contains('offline')) {
-                this.innerHTML = '<i class="fas fa-circle me-2"></i><span class="lang-text en">Offline</span><span class="lang-text bn">অফলাইন</span>';
-              } else {
-                this.innerHTML = '<i class="fas fa-circle me-2"></i><span class="lang-text en">Online</span><span class="lang-text bn">অনলাইন</span>';
-              }
-            } else {
-              // Revert UI change if API call fails
-              this.classList.toggle('offline');
-              alert('Error updating status. Please try again.');
-            }
-          } catch (error) {
-            console.error('Error updating driver status:', error);
-            // Revert UI change if API call fails
-            this.classList.toggle('offline');
-            alert('Error updating status. Please try again.');
-          }
-        });
-      }
-
       // Initialize map when page loads
       initMap();
 
@@ -2198,11 +1868,11 @@ $driver_id = $_SESSION['user']['id'];
             this.style.backgroundColor = 'var(--accent-color)';
             this.style.color = 'white';
             // In a real application, this would toggle traffic layer
-            alert(isBangla ? 'ট্রাফিক লেয়ার সক্রিয় করা হয়েছে' : 'Traffic layer activated');
+            alert(isBangla ? 'ট্রাফিক লেয ার সক্রিয় করা হয়েছে' : 'Traffic layer activated');
           } else {
             this.style.backgroundColor = 'white';
             this.style.color = 'var(--primary-color)';
-            alert(isBangla ? 'ট্রাফিক লেয়ার নিষ্ক্রিয় করা হয়েছে' : 'Traffic layer deactivated');
+            alert(isBangla ? 'ট্রাফিক লেয ার নিষ্ক্রিয় করা হয়েছে' : 'Traffic layer deactivated');
           }
         });
       }
@@ -2222,8 +1892,6 @@ $driver_id = $_SESSION['user']['id'];
         if (e.key === 'Escape' && sidebar.classList.contains('active')) {
           closeSidebarFunc();
         }
-
-        // (Navigation is always visible; keyboard toggle removed)
       });
 
       // Simulate real-time location updates
@@ -2252,12 +1920,6 @@ $driver_id = $_SESSION['user']['id'];
           map.panTo(newPos);
         }
       }, 5000); // Update every 5 seconds
-
-      // Fetch driver data when page loads
-      fetchDriverData();
-
-      // Refresh data every 30 seconds
-      setInterval(fetchDriverData, 30000);
     });
   </script>
 </body>

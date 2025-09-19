@@ -15,5 +15,6 @@ if (ini_get('session.use_cookies')) {
   );
 }
 session_destroy();
-header('Location: index.php');
+// Redirect to index with a flag so index can show a logout confirmation
+header('Location: index.php?logged_out=1');
 exit;

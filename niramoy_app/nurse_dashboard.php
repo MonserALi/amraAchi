@@ -5,89 +5,153 @@ if (empty($_SESSION['user'])) {
   header('Location: login.php');
   exit;
 }
-$user = $_SESSION['user'];
 $pdo = get_db();
+$user = $_SESSION['user'];
 $userId = (int)($user['id'] ?? 0);
 
-// Get dashboard statistics
-// Upcoming Appointments Count
-$stmt = $pdo->prepare("SELECT COUNT(*) FROM appointments WHERE patient_id = :uid AND appointment_date >= CURDATE()");
+// Determine nurse id if exists
+$stmt = $pdo->prepare('SELECT id FROM nurses WHERE user_id = :uid LIMIT 1');
 $stmt->execute([':uid' => $userId]);
-$upcomingCount = $stmt->fetchColumn();
+$nurse = $stmt->fetch();
+$nurseId = $nurse ? (int)$nurse['id'] : null;
 
-// Health Records Count
-$stmt = $pdo->prepare("SELECT COUNT(*) FROM patient_reports WHERE patient_id = :uid");
-$stmt->execute([':uid' => $userId]);
-$recordsCount = $stmt->fetchColumn();
-
-// Active Prescriptions Count
-$stmt = $pdo->prepare("
-    SELECT COUNT(*) 
-    FROM prescriptions 
-    WHERE patient_id = :uid 
-    AND (
-        (follow_up_date IS NOT NULL AND follow_up_date >= CURDATE())
-        OR
-        (follow_up_date IS NULL AND created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY))
-    )
-");
-$stmt->execute([':uid' => $userId]);
-$prescriptionsCount = $stmt->fetchColumn();
-
-// Health Tips Count (static for now)
-$healthTipsCount = 5;
-
-// Get upcoming appointments
-$stmt = $pdo->prepare('SELECT a.*, d.id AS doctor_id, du.name AS doctor_name, du.profile_image AS doctor_image, d.specialization FROM appointments a JOIN doctors d ON a.doctor_id = d.id JOIN users du ON d.user_id = du.id WHERE a.patient_id = :uid AND a.appointment_date >= CURDATE() ORDER BY a.appointment_date ASC, a.appointment_time ASC LIMIT 2');
-$stmt->execute([':uid' => $userId]);
-$upcomingAppointments = $stmt->fetchAll();
-
-// Get recent health records
-$stmt = $pdo->prepare("
-    SELECT * 
-    FROM patient_reports 
-    WHERE patient_id = :uid 
-    ORDER BY created_at DESC 
-    LIMIT 4
-");
-$stmt->execute([':uid' => $userId]);
-$recentRecords = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-// Function to get report icon based on report type
-function getReportIcon($reportType)
-{
-  $reportType = strtolower($reportType);
-  switch ($reportType) {
-    case 'blood test':
-      return 'fa-tint';
-    case 'x-ray':
-      return 'fa-x-ray';
-    case 'urine test':
-      return 'fa-vial';
-    case 'prescription':
-      return 'fa-file-prescription';
-    case 'ecg':
-      return 'fa-heartbeat';
-    case 'mri':
-      return 'fa-microscope';
-    case 'ct scan':
-      return 'fa-x-ray';
-    default:
-      return 'fa-file-medical';
+// Assigned patients count
+if ($nurseId) {
+  try {
+    $stmt = $pdo->prepare('SELECT COUNT(DISTINCT patient_id) FROM nurse_assignments WHERE nurse_id = :nid');
+    $stmt->execute([':nid' => $nurseId]);
+    $assignedPatients = (int)$stmt->fetchColumn();
+  } catch (Exception $e) {
+    $assignedPatients = 0;
   }
+} else {
+  $assignedPatients = 0;
 }
+
+// Today's tasks (e.g., visits, vitals) - best effort from nurse_tasks table
+if ($nurseId) {
+  try {
+    $stmt = $pdo->prepare('SELECT COUNT(*) FROM nurse_tasks WHERE nurse_id = :nid AND date = CURDATE()');
+    $stmt->execute([':nid' => $nurseId]);
+    $todayTasks = (int)$stmt->fetchColumn();
+  } catch (Exception $e) {
+    $todayTasks = 0;
+  }
+} else {
+  $todayTasks = 0;
+}
+
+// Recent vitals or records for assigned patients
+try {
+  if ($nurseId) {
+    $stmt = $pdo->prepare('SELECT v.*, u.name AS patient_name FROM vitals v JOIN users u ON v.patient_id = u.id JOIN nurse_assignments na ON na.patient_id = v.patient_id WHERE na.nurse_id = :nid ORDER BY v.recorded_at DESC LIMIT 5');
+    $stmt->execute([':nid' => $nurseId]);
+    $recentVitals = $stmt->fetchAll();
+  } else {
+    $recentVitals = [];
+  }
+} catch (Exception $e) {
+  $recentVitals = [];
+}
+
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Patient Dashboard - AmraAchi</title>
+  <title>Nurse Dashboard - AmraAchi</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
-    /* CSS remains the same as provided */
+    :root {
+      --primary-color: #1a5276;
+      --secondary-color: #2980b9;
+      --accent-color: #27ae60;
+      --emergency-color: #e74c3c;
+      --epidemic-color: #c0392b;
+      --light-bg: #ecf0f1;
+      --dark-text: #2c3e50;
+      --sidebar-width: 280px;
+      --card-shadow: 0 10px 20px rgba(0, 0, 0, 0.05);
+      --hover-shadow: 0 15px 30px rgba(0, 0, 0, 0.1);
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #f5f7fa 0%, #e4eaf5 100%);
+      color: var(--dark-text);
+      overflow-x: hidden;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ===== TOP HEADER ===== */
+    .top-header {
+      background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+      color: white;
+      padding: 10px 0;
+      position: relative;
+      z-index: 1000;
+      transition: transform 0.3s ease, opacity 0.3s ease;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+
+    .top-header.hidden {
+      transform: translateY(-100%);
+      opacity: 0;
+    }
+
+    .contact-info span {
+      margin-right: 20px;
+      font-size: 14px;
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .contact-info i {
+      margin-right: 5px;
+    }
+
+    .social-icons a {
+      color: white;
+      margin-left: 15px;
+      transition: all 0.3s;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .social-icons a:hover {
+      color: var(--light-bg);
+      transform: translateY(-2px);
+      background-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .lang-toggle {
+      background-color: rgba(255, 255, 255, 0.2);
+      border: none;
+      color: white;
+      padding: 5px 15px;
+      border-radius: 20px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.3s;
+      font-weight: 500;
+    }
+
+    .lang-toggle:hover {
+      background-color: rgba(255, 255, 255, 0.3);
+      transform: scale(1.05);
+    }
+
     /* ===== MAIN HEADER ===== */
     .main-header {
       background-color: white;
@@ -264,8 +328,8 @@ function getReportIcon($reportType)
       }
     }
 
-    .emergency-btn {
-      background: linear-gradient(135deg, var(--emergency-color), #c0392b);
+    .shift-status {
+      background-color: var(--accent-color);
       color: white;
       border: none;
       padding: 8px 15px;
@@ -273,15 +337,21 @@ function getReportIcon($reportType)
       font-weight: 600;
       transition: all 0.3s;
       margin-left: 10px;
-      box-shadow: 0 4px 8px rgba(231, 76, 60, 0.3);
       display: flex;
       align-items: center;
     }
 
-    .emergency-btn:hover {
-      background: linear-gradient(135deg, #c0392b, var(--emergency-color));
+    .shift-status:hover {
+      background-color: #229954;
       transform: translateY(-2px);
-      box-shadow: 0 6px 12px rgba(231, 76, 60, 0.4);
+    }
+
+    .shift-status.off-duty {
+      background-color: #95a5a6;
+    }
+
+    .shift-status.off-duty:hover {
+      background-color: #7f8c8d;
     }
 
     /* ===== SIDEBAR ===== */
@@ -521,28 +591,24 @@ function getReportIcon($reportType)
       font-weight: 700;
       margin-bottom: 10px;
       background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
-      background-clip: text;
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
 
     .dashboard-card.success .card-value {
       background: linear-gradient(135deg, var(--accent-color), #2ecc71);
-      background-clip: text;
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
 
     .dashboard-card.danger .card-value {
       background: linear-gradient(135deg, var(--emergency-color), #e74c3c);
-      background-clip: text;
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
 
     .dashboard-card.warning .card-value {
       background: linear-gradient(135deg, #f39c12, #f1c40f);
-      background-clip: text;
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
@@ -620,14 +686,14 @@ function getReportIcon($reportType)
       transform: translateX(3px);
     }
 
-    /* ===== APPOINTMENT LIST ===== */
-    .appointment-list {
+    /* ===== TASK LIST ===== */
+    .task-list {
       list-style: none;
       padding: 0;
       margin: 0;
     }
 
-    .appointment-item {
+    .task-item {
       display: flex;
       align-items: center;
       padding: 15px;
@@ -635,34 +701,34 @@ function getReportIcon($reportType)
       transition: all 0.3s;
     }
 
-    .appointment-item:hover {
+    .task-item:hover {
       background-color: rgba(26, 82, 118, 0.05);
     }
 
-    .appointment-item:last-child {
+    .task-item:last-child {
       border-bottom: none;
     }
 
-    .appointment-doctor {
-      width: 60px;
-      height: 60px;
+    .task-patient {
+      width: 50px;
+      height: 50px;
       border-radius: 50%;
       object-fit: cover;
       margin-right: 15px;
       border: 2px solid var(--light-bg);
     }
 
-    .appointment-details {
+    .task-details {
       flex: 1;
     }
 
-    .appointment-doctor-name {
+    .task-patient-name {
       font-weight: 600;
       margin-bottom: 5px;
       color: var(--primary-color);
     }
 
-    .appointment-info {
+    .task-info {
       font-size: 0.9rem;
       color: #666;
       margin-bottom: 3px;
@@ -670,42 +736,74 @@ function getReportIcon($reportType)
       align-items: center;
     }
 
-    .appointment-info i {
+    .task-info i {
       margin-right: 5px;
       font-size: 0.8rem;
       color: var(--secondary-color);
     }
 
-    .appointment-status {
+    .task-priority {
       padding: 5px 12px;
       border-radius: 20px;
       font-size: 0.8rem;
       font-weight: 500;
     }
 
-    .status-upcoming {
-      background-color: rgba(39, 174, 96, 0.1);
-      color: var(--accent-color);
-    }
-
-    .status-completed {
-      background-color: rgba(26, 82, 118, 0.1);
-      color: var(--primary-color);
-    }
-
-    .status-cancelled {
+    .priority-high {
       background-color: rgba(231, 76, 60, 0.1);
       color: var(--emergency-color);
     }
 
-    /* ===== HEALTH RECORDS ===== */
-    .health-records {
+    .priority-medium {
+      background-color: rgba(243, 156, 18, 0.1);
+      color: #f39c12;
+    }
+
+    .priority-low {
+      background-color: rgba(39, 174, 96, 0.1);
+      color: var(--accent-color);
+    }
+
+    .task-actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    .task-action-btn {
+      padding: 5px 10px;
+      border-radius: 5px;
+      border: none;
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    .btn-complete {
+      background-color: var(--accent-color);
+      color: white;
+    }
+
+    .btn-complete:hover {
+      background-color: #229954;
+    }
+
+    .btn-view {
+      background-color: var(--primary-color);
+      color: white;
+    }
+
+    .btn-view:hover {
+      background-color: var(--secondary-color);
+    }
+
+    /* ===== MEDICATION SCHEDULE ===== */
+    .medication-schedule {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
       gap: 15px;
     }
 
-    .record-card {
+    .medication-card {
       background: linear-gradient(135deg, rgba(26, 82, 118, 0.03), rgba(41, 128, 185, 0.08));
       border-radius: 12px;
       padding: 20px;
@@ -714,29 +812,105 @@ function getReportIcon($reportType)
       border: 1px solid rgba(26, 82, 118, 0.1);
     }
 
-    .record-card:hover {
+    .medication-card:hover {
       transform: translateY(-5px);
       box-shadow: 0 10px 20px rgba(0, 0, 0, 0.05);
       background: linear-gradient(135deg, rgba(26, 82, 118, 0.05), rgba(41, 128, 185, 0.12));
     }
 
-    .record-icon {
+    .medication-icon {
       font-size: 2.5rem;
       margin-bottom: 15px;
       background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
-      background-clip: text;
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
 
-    .record-title {
+    .medication-title {
       font-weight: 600;
       margin-bottom: 8px;
       color: var(--primary-color);
     }
 
-    .record-date {
+    .medication-time {
       font-size: 0.8rem;
+      color: #666;
+    }
+
+    .medication-patient {
+      font-size: 0.8rem;
+      color: #666;
+      margin-top: 5px;
+    }
+
+    /* ===== VITAL SIGNS ===== */
+    .vital-signs {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 15px;
+    }
+
+    .vital-card {
+      background: linear-gradient(135deg, rgba(26, 82, 118, 0.03), rgba(41, 128, 185, 0.08));
+      border-radius: 12px;
+      padding: 20px;
+      text-align: center;
+      transition: all 0.3s;
+      border: 1px solid rgba(26, 82, 118, 0.1);
+    }
+
+    .vital-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.05);
+      background: linear-gradient(135deg, rgba(26, 82, 118, 0.05), rgba(41, 128, 185, 0.12));
+    }
+
+    .vital-icon {
+      font-size: 2rem;
+      margin-bottom: 10px;
+      background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .vital-value {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--primary-color);
+    }
+
+    .vital-label {
+      font-size: 0.8rem;
+      color: #666;
+    }
+
+    .vital-patient {
+      font-size: 0.7rem;
+      color: #666;
+      margin-top: 5px;
+    }
+
+    /* ===== SHIFT SCHEDULE ===== */
+    .shift-schedule {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .shift-item {
+      text-align: center;
+      flex: 1;
+    }
+
+    .shift-time {
+      font-size: 1.2rem;
+      font-weight: 600;
+      color: var(--primary-color);
+    }
+
+    .shift-label {
+      font-size: 0.9rem;
       color: #666;
     }
 
@@ -972,30 +1146,18 @@ function getReportIcon($reportType)
       }
     }
 
-    /* Desktop: show sidebar and offset content */
-    @media (min-width: 992px) {
-      .sidebar {
-        transform: translateX(0);
-      }
-
-      .main-content {
-        margin-left: var(--sidebar-width);
-      }
-
-      .nav-toggle-btn,
-      .show-nav-btn {
-        display: none;
-      }
-    }
-
     @media (max-width: 768px) {
       .contact-info span {
         display: block;
         margin-bottom: 5px;
       }
 
-      .health-records {
+      .medication-schedule {
         grid-template-columns: 1fr;
+      }
+
+      .vital-signs {
+        grid-template-columns: repeat(2, 1fr);
       }
 
       .sidebar {
@@ -1007,111 +1169,152 @@ function getReportIcon($reportType)
         margin-bottom: 30px;
       }
     }
-
-    /* CSS Variables */
-    :root {
-      --primary-color: #1a5276;
-      --secondary-color: #2980b9;
-      --accent-color: #27ae60;
-      --emergency-color: #e74c3c;
-      --epidemic-color: #c0392b;
-      --light-bg: #ecf0f1;
-      --dark-text: #2c3e50;
-      --section-bg: #f8f9fa;
-      --sidebar-width: 250px;
-      --card-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
-      --hover-shadow: 0 15px 30px rgba(0, 0, 0, 0.1);
-    }
   </style>
 </head>
 
 <body>
-  <!-- Sidebar -->
-  <aside class="sidebar" id="sidebar" aria-label="Main navigation">
-    <div class="sidebar-header">
-      <div class="sidebar-logo">
-        <i class="fas fa-heartbeat"></i>
-        <span class="lang-text en">AmraAchi</span>
-        <span class="lang-text bn">আমরাআছি</span>
+  <!-- Top Header -->
+  <?php include __DIR__ . '/inc/top_header.php'; ?>
+  <!-- Main Header -->
+  <header class="main-header" id="mainHeader">
+    <div class="container">
+      <div class="d-flex justify-content-between align-items-center">
+        <div class="d-flex align-items-center">
+          <button class="menu-toggle" id="menuToggle" aria-label="Toggle navigation">
+            <i class="fas fa-bars"></i>
+          </button>
+          <a class="navbar-brand" href="index.html">
+            <i class="fas fa-heartbeat"></i>
+            <span class="lang-text en">AmraAchi</span>
+            <span class="lang-text bn">আমরাআছি</span>
+          </a>
+        </div>
+        <div class="d-flex align-items-center">
+          <div class="notification-icon">
+            <i class="fas fa-bell"></i>
+            <span class="notification-badge">4</span>
+          </div>
+          <div class="user-profile-nav">
+            <img src="https://randomuser.me/api/portraits/women/44.jpg" alt="User" class="user-avatar-nav">
+            <div class="user-info-nav">
+              <h4><span class="lang-text en">Ayesha Siddiqua</span><span class="lang-text bn">আয়েশা সিদ্দিকী</span></h4>
+              <p><span class="lang-text en">Staff Nurse</span><span class="lang-text bn">স্টাফ নার্স</span></p>
+            </div>
+            <div class="dropdown">
+              <button class="dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="fas fa-chevron-down"></i>
+              </button>
+              <ul class="dropdown-menu dropdown-menu-end">
+                <li><a class="dropdown-item" href="#"><i class="fas fa-user me-2"></i> <span class="lang-text en">Profile</span><span class="lang-text bn">প্রোফাইল</span></a></li>
+                <li><a class="dropdown-item" href="#"><i class="fas fa-cog me-2"></i> <span class="lang-text en">Settings</span><span class="lang-text bn">সেটিংস</span></a></li>
+                <li>
+                  <hr class="dropdown-divider">
+                </li>
+                <li><a class="dropdown-item" href="logout.php"><i class="fas fa-sign-out-alt me-2"></i> <span class="lang-text en">Logout</span><span class="lang-text bn">লগআউট</span></a></li>
+              </ul>
+            </div>
+          </div>
+          <button class="shift-status" id="shiftStatus">
+            <i class="fas fa-circle me-2"></i>
+            <span class="lang-text en">On Duty</span>
+            <span class="lang-text bn">দায়িত্বে</span>
+          </button>
+        </div>
       </div>
-      <button class="close-sidebar" id="closeSidebar" aria-label="Close navigation">
-        <i class="fas fa-times"></i>
-      </button>
     </div>
-    <nav>
-      <ul class="sidebar-menu">
-        <li><a href="index.php"><i class="fas fa-house"></i> <span class="lang-text en">Home</span><span class="lang-text bn">হোম</span></a></li>
-        <li><a href="#" class="active"><i class="fas fa-home"></i> <span class="lang-text en">Dashboard</span><span class="lang-text bn">ড্যাশবোর্ড</span></a></li>
-        <li><a href="chat.php"><i class="fas fa-comments"></i> <span class="lang-text en">Chat</span><span class="lang-text bn">চ্যাট</span></a></li>
-        <li><a href="#"><i class="fas fa-calendar-check"></i> <span class="lang-text en">Appointments</span><span class="lang-text bn">অ্যাপয়েন্টমেন্ট</span></a></li>
-        <li><a href="#"><i class="fas fa-user-md"></i> <span class="lang-text en">Find Doctors</span><span class="lang-text bn">ডাক্তার খুঁজুন</span></a></li>
-        <li><a href="#"><i class="fas fa-file-medical"></i> <span class="lang-text en">Health Records</span><span class="lang-text bn">স্বাস্থ্য রেকর্ড</span></a></li>
-        <li><a href="#"><i class="fas fa-pills"></i> <span class="lang-text en">Prescriptions</span><span class="lang-text bn">প্রেসক্রিপশন</span></a></li>
-        <li><a href="#"><i class="fas fa-hospital"></i> <span class="lang-text en">Hospitals</span><span class="lang-text bn">হাসপাতাল</span></a></li>
-        <li><a href="#"><i class="fas fa-ambulance"></i> <span class="lang-text en">Emergency</span><span class="lang-text bn">জরুরি</span></a></li>
-        <li><a href="#"><i class="fas fa-user"></i> <span class="lang-text en">Profile</span><span class="lang-text bn">প্রোফাইল</span></a></li>
-        <li><a href="#"><i class="fas fa-cog"></i> <span class="lang-text en">Settings</span><span class="lang-text bn">সেটিংস</span></a></li>
-        <li>
-          <hr class="dropdown-divider">
-        </li>
-        <!-- Hide navigation removed; navigation always visible -->
-      </ul>
-    </nav>
-    <div class="sidebar-footer">
-      <a href="logout.php"><i class="fas fa-sign-out-alt"></i> <span class="lang-text en">Logout</span><span class="lang-text bn">লগআউট</span></a>
-    </div>
-  </aside>
-  <!-- Overlay -->
-  <div class="overlay" id="overlay" aria-label="Sidebar overlay"></div>
-  <!-- Navigation hide/show removed globally; navigation always visible -->
+  </header>
+  <!-- Sidebar -->
+  <?php include __DIR__ . '/inc/sidebar.php'; ?>
   <!-- Main Content -->
   <main class="main-content" id="mainContent">
     <div class="d-flex justify-content-between align-items-center mb-4">
-      <h1><span class="lang-text en">Patient Dashboard</span><span class="lang-text bn">রোগী ড্যাশবোর্ড</span></h1>
+      <h1><span class="lang-text en">Nurse Dashboard</span><span class="lang-text bn">নার্স ড্যাশবোর্ড</span></h1>
       <!-- Hide navigation removed; navigation always visible -->
     </div>
     <!-- Dashboard Cards -->
     <div class="dashboard-cards">
       <div class="dashboard-card primary">
         <div class="card-icon primary">
-          <i class="fas fa-calendar-check"></i>
+          <i class="fas fa-tasks"></i>
         </div>
-        <div class="card-title"><span class="lang-text en">Upcoming Appointments</span><span class="lang-text bn">আসন্ন অ্যাপয়েন্টমেন্ট</span></div>
-        <div class="card-value"><?php echo $upcomingCount; ?></div>
-        <a href="#" class="card-link"><span class="lang-text en">View All</span><span class="lang-text bn">সব দেখুন</span> <i class="fas fa-arrow-right"></i></a>
+        <div class="card-title"><span class="lang-text en">Pending Tasks</span><span class="lang-text bn">মুলতুবি কাজ</span></div>
+        <div class="card-value"><?php echo isset($todayTasks) ? (int)$todayTasks : 0; ?></div>
+        <a href="tasks.php" class="card-link"><span class="lang-text en">View All</span><span class="lang-text bn">সব দেখুন</span> <i class="fas fa-arrow-right"></i></a>
       </div>
       <div class="dashboard-card success">
         <div class="card-icon success">
-          <i class="fas fa-file-medical"></i>
+          <i class="fas fa-users"></i>
         </div>
-        <div class="card-title"><span class="lang-text en">Health Records</span><span class="lang-text bn">স্বাস্থ্য রেকর্ড</span></div>
-        <div class="card-value"><?php echo $recordsCount; ?></div>
-        <a href="#" class="card-link"><span class="lang-text en">View All</span><span class="lang-text bn">সব দেখুন</span> <i class="fas fa-arrow-right"></i></a>
+        <div class="card-title"><span class="lang-text en">Assigned Patients</span><span class="lang-text bn">নির্ধারিত রোগী</span></div>
+        <div class="card-value"><?php echo isset($assignedPatients) ? (int)$assignedPatients : 0; ?></div>
+        <a href="assigned_patients.php" class="card-link"><span class="lang-text en">View All</span><span class="lang-text bn">সব দেখুন</span> <i class="fas fa-arrow-right"></i></a>
       </div>
       <div class="dashboard-card danger">
         <div class="card-icon danger">
           <i class="fas fa-pills"></i>
         </div>
-        <div class="card-title"><span class="lang-text en">Active Prescriptions</span><span class="lang-text bn">সক্রিয় প্রেসক্রিপশন</span></div>
-        <div class="card-value"><?php echo $prescriptionsCount; ?></div>
-        <a href="#" class="card-link"><span class="lang-text en">View All</span><span class="lang-text bn">সব দেখুন</span> <i class="fas fa-arrow-right"></i></a>
+        <div class="card-title"><span class="lang-text en">Medications Due</span><span class="lang-text bn">ওষুধ দেওয়ার সময়</span></div>
+        <div class="card-value"><?php
+                                // medications due: try medication_schedules or medications table
+                                $medDue = 0;
+                                try {
+                                  if (columnExists($pdo, 'medication_schedules', 'nurse_id')) {
+                                    $stmt = $pdo->prepare('SELECT COUNT(*) FROM medication_schedules WHERE nurse_id = :nid AND schedule_date = CURDATE()');
+                                    $stmt->execute([':nid' => $nurseId]);
+                                    $medDue = (int)$stmt->fetchColumn();
+                                  } elseif (columnExists($pdo, 'medications', 'patient_id')) {
+                                    // fallback: count medications with next_dose today
+                                    $stmt = $pdo->prepare('SELECT COUNT(*) FROM medications WHERE nurse_id = :nid AND next_dose_date = CURDATE()');
+                                    $stmt->execute([':nid' => $nurseId]);
+                                    $medDue = (int)$stmt->fetchColumn();
+                                  }
+                                } catch (Exception $e) {
+                                  $medDue = 0;
+                                }
+                                echo $medDue;
+                                ?></div>
+        <a href="medications.php" class="card-link"><span class="lang-text en">View All</span><span class="lang-text bn">সব দেখুন</span> <i class="fas fa-arrow-right"></i></a>
       </div>
       <div class="dashboard-card warning">
         <div class="card-icon warning">
           <i class="fas fa-heartbeat"></i>
         </div>
-        <div class="card-title"><span class="lang-text en">Health Tips</span><span class="lang-text bn">স্বাস্থ্য টিপস</span></div>
-        <div class="card-value"><?php echo $healthTipsCount; ?></div>
-        <a href="#" class="card-link"><span class="lang-text en">View All</span><span class="lang-text bn">সব দেখুন</span> <i class="fas fa-arrow-right"></i></a>
+        <div class="card-title"><span class="lang-text en">Vital Checks</span><span class="lang-text bn">প্রাণসংকেত পরীক্ষা</span></div>
+        <div class="card-value"><?php echo !empty($recentVitals) ? count($recentVitals) : 0; ?></div>
+        <a href="vitals.php" class="card-link"><span class="lang-text en">View All</span><span class="lang-text bn">সব দেখুন</span> <i class="fas fa-arrow-right"></i></a>
       </div>
     </div>
-    <!-- Upcoming Appointments -->
+    <!-- Shift Schedule -->
     <div class="content-section">
       <div class="section-header">
         <h2 class="section-title">
-          <i class="fas fa-calendar-check"></i>
-          <span class="lang-text en">Upcoming Appointments</span>
-          <span class="lang-text bn">আসন্ন অ্যাপয়েন্টমেন্ট</span>
+          <i class="fas fa-calendar-alt"></i>
+          <span class="lang-text en">Today's Shift</span>
+          <span class="lang-text bn">আজকের শিফট</span>
+        </h2>
+      </div>
+      <div class="shift-schedule">
+        <div class="shift-item">
+          <div class="shift-time">7:00 AM</div>
+          <div class="shift-label"><span class="lang-text en">Start Time</span><span class="lang-text bn">শুরুর সময়</span></div>
+        </div>
+        <div class="shift-item">
+          <div class="shift-time">3:00 PM</div>
+          <div class="shift-label"><span class="lang-text en">Break</span><span class="lang-text bn">বিরতি</span></div>
+        </div>
+        <div class="shift-item">
+          <div class="shift-time">7:00 PM</div>
+          <div class="shift-label"><span class="lang-text en">End Time</span><span class="lang-text bn">শেষ সময়</span></div>
+        </div>
+      </div>
+    </div>
+    <!-- Pending Tasks -->
+    <div class="content-section">
+      <div class="section-header">
+        <h2 class="section-title">
+          <i class="fas fa-tasks"></i>
+          <span class="lang-text en">Pending Tasks</span>
+          <span class="lang-text bn">মুলতুবি কাজ</span>
         </h2>
         <a href="#" class="section-link">
           <span class="lang-text en">View All</span>
@@ -1119,36 +1322,52 @@ function getReportIcon($reportType)
           <i class="fas fa-arrow-right"></i>
         </a>
       </div>
-      <ul class="appointment-list">
-        <?php
-        if (count($upcomingAppointments) === 0) {
-          echo '<li class="appointment-item"><div class="appointment-details"><div class="appointment-doctor-name">No upcoming appointments</div></div></li>';
-        } else {
-          foreach ($upcomingAppointments as $a) {
-            $docImg = !empty($a['doctor_image']) ? (strpos($a['doctor_image'], '/') === 0 || preg_match('#^https?://#i', $a['doctor_image']) ? $a['doctor_image'] : dirname($_SERVER['SCRIPT_NAME']) . '/' . $a['doctor_image']) : 'https://via.placeholder.com/80';
-            $apptDate = date('d M Y', strtotime($a['appointment_date']));
-            $apptTime = date('g:i A', strtotime($a['appointment_time']));
-            echo '<li class="appointment-item">';
-            echo '<img src="' . htmlspecialchars($docImg) . '" alt="Doctor" class="appointment-doctor">';
-            echo '<div class="appointment-details">';
-            echo '<div class="appointment-doctor-name">' . htmlspecialchars($a['doctor_name']) . '</div>';
-            echo '<div class="appointment-info"><i class="fas fa-stethoscope"></i> ' . htmlspecialchars($a['specialization']) . '</div>';
-            echo '<div class="appointment-info"><i class="fas fa-calendar"></i> ' . $apptDate . ', ' . $apptTime . '</div>';
-            echo '</div>';
-            echo '<span class="appointment-status status-upcoming">Upcoming</span>';
-            echo '</li>';
-          }
-        }
-        ?>
+      <ul class="task-list">
+        <li class="task-item">
+          <img src="https://randomuser.me/api/portraits/women/44.jpg" alt="Patient" class="task-patient">
+          <div class="task-details">
+            <div class="task-patient-name"><span class="lang-text en">Fatima Rahman</span><span class="lang-text bn">ফাতেমা রহমান</span></div>
+            <div class="task-info"><i class="fas fa-syringe"></i> <span class="lang-text en">Administer Medication</span><span class="lang-text bn">ওষুধ প্রদান</span></div>
+            <div class="task-info"><i class="fas fa-clock"></i> <span class="lang-text en">Due in 30 mins</span><span class="lang-text bn">৩০ মিনিটের মধ্যে</span></div>
+          </div>
+          <span class="task-priority priority-high"><span class="lang-text en">High</span><span class="lang-text bn">উচ্চ</span></span>
+          <div class="task-actions">
+            <button class="task-action-btn btn-complete"><span class="lang-text en">Complete</span><span class="lang-text bn">সম্পন্ন</span></button>
+          </div>
+        </li>
+        <li class="task-item">
+          <img src="https://randomuser.me/api/portraits/men/67.jpg" alt="Patient" class="task-patient">
+          <div class="task-details">
+            <div class="task-patient-name"><span class="lang-text en">Mohammad Ali</span><span class="lang-text bn">মোহাম্মদ আলী</span></div>
+            <div class="task-info"><i class="fas fa-heartbeat"></i> <span class="lang-text en">Check Vital Signs</span><span class="lang-text bn">প্রাণসংকেত পরীক্ষা</span></div>
+            <div class="task-info"><i class="fas fa-clock"></i> <span class="lang-text en">Due in 1 hour</span><span class="lang-text bn">১ ঘন্টার মধ্যে</span></div>
+          </div>
+          <span class="task-priority priority-medium"><span class="lang-text en">Medium</span><span class="lang-text bn">মাঝারি</span></span>
+          <div class="task-actions">
+            <button class="task-action-btn btn-complete"><span class="lang-text en">Complete</span><span class="lang-text bn">সম্পন্ন</span></button>
+          </div>
+        </li>
+        <li class="task-item">
+          <img src="https://randomuser.me/api/portraits/women/68.jpg" alt="Patient" class="task-patient">
+          <div class="task-details">
+            <div class="task-patient-name"><span class="lang-text en">Nusrat Jahan</span><span class="lang-text bn">নুসরাত জাহান</span></div>
+            <div class="task-info"><i class="fas fa-band-aid"></i> <span class="lang-text en">Wound Dressing</span><span class="lang-text bn">ক্ষত ড্রেসিং</span></div>
+            <div class="task-info"><i class="fas fa-clock"></i> <span class="lang-text en">Due in 2 hours</span><span class="lang-text bn">২ ঘন্টার মধ্যে</span></div>
+          </div>
+          <span class="task-priority priority-low"><span class="lang-text en">Low</span><span class="lang-text bn">নিম্ন</span></span>
+          <div class="task-actions">
+            <button class="task-action-btn btn-complete"><span class="lang-text en">Complete</span><span class="lang-text bn">সম্পন্ন</span></button>
+          </div>
+        </li>
       </ul>
     </div>
-    <!-- Health Records -->
+    <!-- Medication Schedule -->
     <div class="content-section">
       <div class="section-header">
         <h2 class="section-title">
-          <i class="fas fa-file-medical"></i>
-          <span class="lang-text en">Recent Health Records</span>
-          <span class="lang-text bn">সাম্প্রতিক স্বাস্থ্য রেকর্ড</span>
+          <i class="fas fa-pills"></i>
+          <span class="lang-text en">Medication Schedule</span>
+          <span class="lang-text bn">ওষুধের সময়সূচী</span>
         </h2>
         <a href="#" class="section-link">
           <span class="lang-text en">View All</span>
@@ -1156,23 +1375,88 @@ function getReportIcon($reportType)
           <i class="fas fa-arrow-right"></i>
         </a>
       </div>
-      <div class="health-records">
-        <?php
-        if (count($recentRecords) === 0) {
-          echo '<p class="text-center">No health records found.</p>';
-        } else {
-          foreach ($recentRecords as $record) {
-            $iconClass = getReportIcon($record['report_type']);
-            echo '<div class="record-card">';
-            echo '<div class="record-icon">';
-            echo '<i class="fas ' . $iconClass . '"></i>';
-            echo '</div>';
-            echo '<div class="record-title">' . htmlspecialchars($record['title']) . '</div>';
-            echo '<div class="record-date">' . date('d M Y', strtotime($record['created_at'])) . '</div>';
-            echo '</div>';
-          }
-        }
-        ?>
+      <div class="medication-schedule">
+        <div class="medication-card">
+          <div class="medication-icon">
+            <i class="fas fa-pills"></i>
+          </div>
+          <div class="medication-title"><span class="lang-text en">Antibiotics</span><span class="lang-text bn">অ্যান্টিবায়োটিক</span></div>
+          <div class="medication-time"><span class="lang-text en">9:00 AM</span><span class="lang-text bn">সকাল ৯:০০</span></div>
+          <div class="medication-patient"><span class="lang-text en">Fatima Rahman</span><span class="lang-text bn">ফাতেমা রহমান</span></div>
+        </div>
+        <div class="medication-card">
+          <div class="medication-icon">
+            <i class="fas fa-tablets"></i>
+          </div>
+          <div class="medication-title"><span class="lang-text en">Pain Reliever</span><span class="lang-text bn">ব্যথানাশক</span></div>
+          <div class="medication-time"><span class="lang-text en">12:00 PM</span><span class="lang-text bn">দুপুর ১২:০০</span></div>
+          <div class="medication-patient"><span class="lang-text en">Mohammad Ali</span><span class="lang-text bn">মোহাম্মদ আলী</span></div>
+        </div>
+        <div class="medication-card">
+          <div class="medication-icon">
+            <i class="fas fa-capsules"></i>
+          </div>
+          <div class="medication-title"><span class="lang-text en">Vitamins</span><span class="lang-text bn">ভিটামিন</span></div>
+          <div class="medication-time"><span class="lang-text en">2:00 PM</span><span class="lang-text bn">দুপুর ২:০০</span></div>
+          <div class="medication-patient"><span class="lang-text en">Nusrat Jahan</span><span class="lang-text bn">নুসরাত জাহান</span></div>
+        </div>
+        <div class="medication-card">
+          <div class="medication-icon">
+            <i class="fas fa-syringe"></i>
+          </div>
+          <div class="medication-title"><span class="lang-text en">Insulin</span><span class="lang-text bn">ইনসুলিন</span></div>
+          <div class="medication-time"><span class="lang-text en">4:00 PM</span><span class="lang-text bn">বিকাল ৪:০০</span></div>
+          <div class="medication-patient"><span class="lang-text en">Karim Ahmed</span><span class="lang-text bn">করিম আহমেদ</span></div>
+        </div>
+      </div>
+    </div>
+    <!-- Vital Signs -->
+    <div class="content-section">
+      <div class="section-header">
+        <h2 class="section-title">
+          <i class="fas fa-heartbeat"></i>
+          <span class="lang-text en">Recent Vital Signs</span>
+          <span class="lang-text bn">সাম্প্রতিক প্রাণসংকেত</span>
+        </h2>
+        <a href="#" class="section-link">
+          <span class="lang-text en">View All</span>
+          <span class="lang-text bn">সব দেখুন</span>
+          <i class="fas fa-arrow-right"></i>
+        </a>
+      </div>
+      <div class="vital-signs">
+        <div class="vital-card">
+          <div class="vital-icon">
+            <i class="fas fa-heartbeat"></i>
+          </div>
+          <div class="vital-value">72</div>
+          <div class="vital-label"><span class="lang-text en">Heart Rate</span><span class="lang-text bn">হৃদস্পন্দন</span></div>
+          <div class="vital-patient"><span class="lang-text en">Fatima Rahman</span><span class="lang-text bn">ফাতেমা রহমান</span></div>
+        </div>
+        <div class="vital-card">
+          <div class="vital-icon">
+            <i class="fas fa-thermometer-half"></i>
+          </div>
+          <div class="vital-value">98.6°F</div>
+          <div class="vital-label"><span class="lang-text en">Temperature</span><span class="lang-text bn">তাপমাত্রা</span></div>
+          <div class="vital-patient"><span class="lang-text en">Mohammad Ali</span><span class="lang-text bn">মোহাম্মদ আলী</span></div>
+        </div>
+        <div class="vital-card">
+          <div class="vital-icon">
+            <i class="fas fa-lungs"></i>
+          </div>
+          <div class="vital-value">16</div>
+          <div class="vital-label"><span class="lang-text en">Respiration</span><span class="lang-text bn">শ্বাসপ্রশ্বাস</span></div>
+          <div class="vital-patient"><span class="lang-text en">Nusrat Jahan</span><span class="lang-text bn">নুসরাত জাহান</span></div>
+        </div>
+        <div class="vital-card">
+          <div class="vital-icon">
+            <i class="fas fa-tachometer-alt"></i>
+          </div>
+          <div class="vital-value">120/80</div>
+          <div class="vital-label"><span class="lang-text en">Blood Pressure</span><span class="lang-text bn">রক্তচাপ</span></div>
+          <div class="vital-patient"><span class="lang-text en">Karim Ahmed</span><span class="lang-text bn">করিম আহমেদ</span></div>
+        </div>
       </div>
     </div>
   </main>
@@ -1275,6 +1559,7 @@ function getReportIcon($reportType)
       const mainContent = document.getElementById('mainContent');
       // hide/show navigation removed — navigation always visible
       const langToggle = document.getElementById('langToggle');
+      const shiftStatus = document.getElementById('shiftStatus');
 
       // Function to open sidebar
       function openSidebar() {
@@ -1315,6 +1600,19 @@ function getReportIcon($reportType)
         });
       }
 
+      // Shift status toggle functionality
+      if (shiftStatus) {
+        shiftStatus.addEventListener('click', function() {
+          this.classList.toggle('off-duty');
+          const isBangla = document.body.classList.contains('bn');
+          if (this.classList.contains('off-duty')) {
+            this.innerHTML = '<i class="fas fa-circle me-2"></i><span class="lang-text en">Off Duty</span><span class="lang-text bn">দায়িত্বে নয়</span>';
+          } else {
+            this.innerHTML = '<i class="fas fa-circle me-2"></i><span class="lang-text en">On Duty</span><span class="lang-text bn">দায়িত্বে</span>';
+          }
+        });
+      }
+
       // Close sidebar when clicking on a link (optional, for better UX)
       const sidebarLinks = document.querySelectorAll('.sidebar-menu a');
       sidebarLinks.forEach(link => {
@@ -1330,32 +1628,7 @@ function getReportIcon($reportType)
         if (e.key === 'Escape' && sidebar.classList.contains('active')) {
           closeSidebarFunc();
         }
-
-        // Keyboard shortcut to toggle navigation (Ctrl+N)
-        if (e.ctrlKey && e.key === 'n') {
-          e.preventDefault();
-          if (topHeader.classList.contains('hidden')) {
-            showNavigation();
-          } else {
-            hideNavigation();
-          }
-        }
       });
-    });
-
-    // Emergency Button
-    document.addEventListener('DOMContentLoaded', function() {
-      const emergencyBtn = document.querySelector('.emergency-btn');
-      if (emergencyBtn) {
-        emergencyBtn.addEventListener('click', () => {
-          const isBangla = document.body.classList.contains('bn');
-          if (isBangla) {
-            alert('জরুরি পরিষেবা জানানো হয়েছে। একটি অ্যাম্বুলেন্স পথে আছে!');
-          } else {
-            alert('Emergency services have been notified. An ambulance is on the way!');
-          }
-        });
-      }
     });
   </script>
 </body>

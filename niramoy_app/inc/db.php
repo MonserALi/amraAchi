@@ -23,3 +23,18 @@ function json_response($data, $status = 200)
   echo json_encode($data, JSON_UNESCAPED_UNICODE);
   exit;
 }
+
+/**
+ * Check if a column exists in a table for the current database.
+ * Returns true if exists, false on error or not found.
+ */
+function columnExists(PDO $pdo, $table, $column)
+{
+  try {
+    $stmt = $pdo->prepare('SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :table AND COLUMN_NAME = :column');
+    $stmt->execute([':table' => $table, ':column' => $column]);
+    return (bool)$stmt->fetchColumn();
+  } catch (Exception $e) {
+    return false;
+  }
+}

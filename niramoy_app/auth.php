@@ -229,7 +229,7 @@
       const username = document.getElementById('loginUsername').value;
       const password = document.getElementById('loginPassword').value;
       try {
-        const res = await fetch('api.php?q=auth/login', {
+        const res = await fetch('api.php?q=auth/login/' + role, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -244,81 +244,47 @@
           showAlert(js.error || 'Login failed', 'danger');
           return;
         }
-        // pick primary role returned or fallback to selected role
-        const roles = js.user.roles || [role];
-        const primary = roles[0] || role;
-        // simple redirect mapping
-        switch (primary) {
-          case 'doctor':
-            location.href = 'doctor.php';
-            break;
-          case 'hospital_admin':
-            location.href = 'hospital_admin.php';
-            break;
-          case 'nurse':
-            location.href = 'nurse.php';
-            break;
-          case 'driver':
-            location.href = 'driver.php';
-            break;
-          default:
-            location.href = 'patient.php';
-        }
+        showAlert('Login successful! Redirecting...', 'success');
+        // Use the redirect URL from the API response
+        setTimeout(() => {
+          window.location.href = js.redirect || 'patient.php';
+        }, 1500);
       } catch (e) {
         console.error(e);
         showAlert('Login error', 'danger');
       }
     });
 
-    // Register submit (calls API auth/register)
-    document.getElementById('registerForm').addEventListener('submit', async function(e) {
+    // Login submit (calls API auth/login)
+    document.getElementById('loginForm').addEventListener('submit', async function(e) {
       e.preventDefault();
-      const role = document.querySelector('#register .role-option.selected')?.dataset.role || 'patient';
-      const name = document.getElementById('registerName').value;
-      const username = document.getElementById('registerUsername').value;
-      const email = document.getElementById('registerEmail').value;
-      const password = document.getElementById('registerPassword').value;
-      const confirm = document.getElementById('confirmPassword').value;
-      const phone = document.getElementById('registerPhone').value;
-      if (password !== confirm) {
-        showAlert('Passwords do not match', 'danger');
-        return;
-      }
-
-      const payload = {
-        role,
-        name,
-        username,
-        email,
-        password,
-        phone
-      };
-      if (role === 'doctor') {
-        payload.bmdc_code = document.getElementById('bmdcCode').value;
-        payload.department_id = document.getElementById('departmentSelect').value || null;
-        payload.specialization = document.getElementById('specialization').value || null;
-      }
-
+      const role = document.querySelector('#login .role-option.selected')?.dataset.role || 'patient';
+      const username = document.getElementById('loginUsername').value;
+      const password = document.getElementById('loginPassword').value;
       try {
-        const res = await fetch('api.php?q=auth/register', {
+        const res = await fetch('api.php?q=auth/login/' + role, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify(payload)
+          body: JSON.stringify({
+            username,
+            password
+          })
         });
         const js = await res.json();
         if (!res.ok) {
-          showAlert(js.error || 'Registration failed', 'danger');
+          showAlert(js.error || 'Login failed', 'danger');
           return;
         }
-        showAlert('Registration successful. Redirecting to login...');
-        // switch to login tab
-        const loginTab = new bootstrap.Tab(document.getElementById('login-tab'));
-        loginTab.show();
+        showAlert('Login successful! Redirecting...', 'success');
+        // Use the redirect URL from the API response
+        setTimeout(() => {
+          window.location.href = js.redirect || 'patient.php';
+        }, 1500);
       } catch (e) {
         console.error(e);
-        showAlert('Register error', 'danger');
+        showAlert('Login error', 'danger');
       }
     });
   </script>

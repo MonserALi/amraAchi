@@ -5,58 +5,41 @@ if (empty($_SESSION['user'])) {
   header('Location: login.php');
   exit;
 }
-$user = $_SESSION['user'];
 $pdo = get_db();
+$user = $_SESSION['user'];
 $userId = (int)($user['id'] ?? 0);
 
-// Get dashboard statistics
-// Upcoming Appointments Count
+// Upcoming appointments count
 $stmt = $pdo->prepare("SELECT COUNT(*) FROM appointments WHERE patient_id = :uid AND appointment_date >= CURDATE()");
 $stmt->execute([':uid' => $userId]);
-$upcomingCount = $stmt->fetchColumn();
+$upcomingCount = (int)$stmt->fetchColumn();
 
-// Health Records Count
+// Health records count
 $stmt = $pdo->prepare("SELECT COUNT(*) FROM patient_reports WHERE patient_id = :uid");
 $stmt->execute([':uid' => $userId]);
-$recordsCount = $stmt->fetchColumn();
+$recordsCount = (int)$stmt->fetchColumn();
 
-// Active Prescriptions Count
-$stmt = $pdo->prepare("
-    SELECT COUNT(*) 
-    FROM prescriptions 
-    WHERE patient_id = :uid 
-    AND (
-        (follow_up_date IS NOT NULL AND follow_up_date >= CURDATE())
-        OR
-        (follow_up_date IS NULL AND created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY))
-    )
-");
+// Active prescriptions count
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM prescriptions WHERE patient_id = :uid AND ( (follow_up_date IS NOT NULL AND follow_up_date >= CURDATE()) OR (follow_up_date IS NULL AND created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)) )");
 $stmt->execute([':uid' => $userId]);
-$prescriptionsCount = $stmt->fetchColumn();
+$prescriptionsCount = (int)$stmt->fetchColumn();
 
-// Health Tips Count (static for now)
+// Health tips (kept as a small constant list)
 $healthTipsCount = 5;
 
-// Get upcoming appointments
+// Upcoming appointments (limit 2 for dashboard preview)
 $stmt = $pdo->prepare('SELECT a.*, d.id AS doctor_id, du.name AS doctor_name, du.profile_image AS doctor_image, d.specialization FROM appointments a JOIN doctors d ON a.doctor_id = d.id JOIN users du ON d.user_id = du.id WHERE a.patient_id = :uid AND a.appointment_date >= CURDATE() ORDER BY a.appointment_date ASC, a.appointment_time ASC LIMIT 2');
 $stmt->execute([':uid' => $userId]);
 $upcomingAppointments = $stmt->fetchAll();
 
-// Get recent health records
-$stmt = $pdo->prepare("
-    SELECT * 
-    FROM patient_reports 
-    WHERE patient_id = :uid 
-    ORDER BY created_at DESC 
-    LIMIT 4
-");
+// Recent health records (limit 4)
+$stmt = $pdo->prepare('SELECT * FROM patient_reports WHERE patient_id = :uid ORDER BY created_at DESC LIMIT 4');
 $stmt->execute([':uid' => $userId]);
 $recentRecords = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Function to get report icon based on report type
 function getReportIcon($reportType)
 {
-  $reportType = strtolower($reportType);
+  $reportType = strtolower((string)$reportType);
   switch ($reportType) {
     case 'blood test':
       return 'fa-tint';
@@ -77,6 +60,7 @@ function getReportIcon($reportType)
   }
 }
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 
@@ -87,7 +71,92 @@ function getReportIcon($reportType)
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
-    /* CSS remains the same as provided */
+    :root {
+      --primary-color: #1a5276;
+      --secondary-color: #2980b9;
+      --accent-color: #27ae60;
+      --emergency-color: #e74c3c;
+      --epidemic-color: #c0392b;
+      --light-bg: #ecf0f1;
+      --dark-text: #2c3e50;
+      --sidebar-width: 280px;
+      --card-shadow: 0 10px 20px rgba(0, 0, 0, 0.05);
+      --hover-shadow: 0 15px 30px rgba(0, 0, 0, 0.1);
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #f5f7fa 0%, #e4eaf5 100%);
+      color: var(--dark-text);
+      overflow-x: hidden;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ===== TOP HEADER ===== */
+    .top-header {
+      background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+      color: white;
+      padding: 10px 0;
+      position: relative;
+      z-index: 1000;
+      transition: transform 0.3s ease, opacity 0.3s ease;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+
+    .top-header.hidden {
+      transform: translateY(-100%);
+      opacity: 0;
+    }
+
+    .contact-info span {
+      margin-right: 20px;
+      font-size: 14px;
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .contact-info i {
+      margin-right: 5px;
+    }
+
+    .social-icons a {
+      color: white;
+      margin-left: 15px;
+      transition: all 0.3s;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .social-icons a:hover {
+      color: var(--light-bg);
+      transform: translateY(-2px);
+      background-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .lang-toggle {
+      background-color: rgba(255, 255, 255, 0.2);
+      border: none;
+      color: white;
+      padding: 5px 15px;
+      border-radius: 20px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.3s;
+      font-weight: 500;
+    }
+
+    .lang-toggle:hover {
+      background-color: rgba(255, 255, 255, 0.3);
+      transform: scale(1.05);
+    }
+
     /* ===== MAIN HEADER ===== */
     .main-header {
       background-color: white;
@@ -521,28 +590,24 @@ function getReportIcon($reportType)
       font-weight: 700;
       margin-bottom: 10px;
       background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
-      background-clip: text;
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
 
     .dashboard-card.success .card-value {
       background: linear-gradient(135deg, var(--accent-color), #2ecc71);
-      background-clip: text;
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
 
     .dashboard-card.danger .card-value {
       background: linear-gradient(135deg, var(--emergency-color), #e74c3c);
-      background-clip: text;
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
 
     .dashboard-card.warning .card-value {
       background: linear-gradient(135deg, #f39c12, #f1c40f);
-      background-clip: text;
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
@@ -724,7 +789,6 @@ function getReportIcon($reportType)
       font-size: 2.5rem;
       margin-bottom: 15px;
       background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
-      background-clip: text;
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
@@ -972,22 +1036,6 @@ function getReportIcon($reportType)
       }
     }
 
-    /* Desktop: show sidebar and offset content */
-    @media (min-width: 992px) {
-      .sidebar {
-        transform: translateX(0);
-      }
-
-      .main-content {
-        margin-left: var(--sidebar-width);
-      }
-
-      .nav-toggle-btn,
-      .show-nav-btn {
-        display: none;
-      }
-    }
-
     @media (max-width: 768px) {
       .contact-info span {
         display: block;
@@ -1007,25 +1055,83 @@ function getReportIcon($reportType)
         margin-bottom: 30px;
       }
     }
-
-    /* CSS Variables */
-    :root {
-      --primary-color: #1a5276;
-      --secondary-color: #2980b9;
-      --accent-color: #27ae60;
-      --emergency-color: #e74c3c;
-      --epidemic-color: #c0392b;
-      --light-bg: #ecf0f1;
-      --dark-text: #2c3e50;
-      --section-bg: #f8f9fa;
-      --sidebar-width: 250px;
-      --card-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
-      --hover-shadow: 0 15px 30px rgba(0, 0, 0, 0.1);
-    }
   </style>
 </head>
 
 <body>
+  <!-- Top Header -->
+  <div class="top-header" id="topHeader">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-6">
+          <div class="contact-info">
+            <span><i class="fas fa-phone-alt"></i> <span class="lang-text en">+880 1234 567890</span><span class="lang-text bn">+৮৮০ ১২৩৪ ৫৬৭৮৯০</span></span>
+            <span><i class="fas fa-envelope"></i> <span class="lang-text en">info@amraaichi.com</span><span class="lang-text bn">info@amraaichi.com</span></span>
+          </div>
+        </div>
+        <div class="col-md-6 text-end">
+          <button class="lang-toggle" id="langToggle">
+            <span class="lang-text en">বাংলা</span>
+            <span class="lang-text bn">English</span>
+          </button>
+          <div class="social-icons d-inline-block ms-3">
+            <a href="#"><i class="fab fa-facebook-f"></i></a>
+            <a href="#"><i class="fab fa-twitter"></i></a>
+            <a href="#"><i class="fab fa-instagram"></i></a>
+            <a href="#"><i class="fab fa-linkedin-in"></i></a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- Main Header -->
+  <header class="main-header" id="mainHeader">
+    <div class="container">
+      <div class="d-flex justify-content-between align-items-center">
+        <div class="d-flex align-items-center">
+          <button class="menu-toggle" id="menuToggle" aria-label="Toggle navigation">
+            <i class="fas fa-bars"></i>
+          </button>
+          <a class="navbar-brand" href="index.html">
+            <i class="fas fa-heartbeat"></i>
+            <span class="lang-text en">AmraAchi</span>
+            <span class="lang-text bn">আমরাআছি</span>
+          </a>
+        </div>
+        <div class="d-flex align-items-center">
+          <div class="notification-icon">
+            <i class="fas fa-bell"></i>
+            <span class="notification-badge">3</span>
+          </div>
+          <div class="user-profile-nav">
+            <img src="https://randomuser.me/api/portraits/women/44.jpg" alt="User" class="user-avatar-nav">
+            <div class="user-info-nav">
+              <h4><span class="lang-text en"><?php echo htmlspecialchars($user['name'] ?? 'Patient'); ?></span></h4>
+              <p><span class="lang-text en"><?php echo htmlspecialchars(ucfirst($user['primary_role'] ?? 'patient')); ?></span></p>
+            </div>
+            <div class="dropdown">
+              <button class="dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="fas fa-chevron-down"></i>
+              </button>
+              <ul class="dropdown-menu dropdown-menu-end">
+                <li><a class="dropdown-item" href="profile.html">><i class="fas fa-user me-2"></i> <span class="lang-text en">Profile</span><span class="lang-text bn">প্রোফাইল</span></a></li>
+                <li><a class="dropdown-item" href="#"><i class="fas fa-cog me-2"></i> <span class="lang-text en">Settings</span><span class="lang-text bn">সেটিংস</span></a></li>
+                <li>
+                  <hr class="dropdown-divider">
+                </li>
+                <li><a class="dropdown-item" href="logout.php"><i class="fas fa-sign-out-alt me-2"></i> <span class="lang-text en">Logout</span><span class="lang-text bn">লগআউট</span></a></li>
+              </ul>
+            </div>
+          </div>
+          <button class="emergency-btn">
+            <i class="fas fa-ambulance me-2"></i>
+            <span class="lang-text en">SOS</span>
+            <span class="lang-text bn">এসওএস</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
   <!-- Sidebar -->
   <aside class="sidebar" id="sidebar" aria-label="Main navigation">
     <div class="sidebar-header">
@@ -1040,9 +1146,7 @@ function getReportIcon($reportType)
     </div>
     <nav>
       <ul class="sidebar-menu">
-        <li><a href="index.php"><i class="fas fa-house"></i> <span class="lang-text en">Home</span><span class="lang-text bn">হোম</span></a></li>
         <li><a href="#" class="active"><i class="fas fa-home"></i> <span class="lang-text en">Dashboard</span><span class="lang-text bn">ড্যাশবোর্ড</span></a></li>
-        <li><a href="chat.php"><i class="fas fa-comments"></i> <span class="lang-text en">Chat</span><span class="lang-text bn">চ্যাট</span></a></li>
         <li><a href="#"><i class="fas fa-calendar-check"></i> <span class="lang-text en">Appointments</span><span class="lang-text bn">অ্যাপয়েন্টমেন্ট</span></a></li>
         <li><a href="#"><i class="fas fa-user-md"></i> <span class="lang-text en">Find Doctors</span><span class="lang-text bn">ডাক্তার খুঁজুন</span></a></li>
         <li><a href="#"><i class="fas fa-file-medical"></i> <span class="lang-text en">Health Records</span><span class="lang-text bn">স্বাস্থ্য রেকর্ড</span></a></li>
@@ -1054,7 +1158,7 @@ function getReportIcon($reportType)
         <li>
           <hr class="dropdown-divider">
         </li>
-        <!-- Hide navigation removed; navigation always visible -->
+        <!-- Navigation always visible; removed hide navigation control -->
       </ul>
     </nav>
     <div class="sidebar-footer">
@@ -1063,7 +1167,6 @@ function getReportIcon($reportType)
   </aside>
   <!-- Overlay -->
   <div class="overlay" id="overlay" aria-label="Sidebar overlay"></div>
-  <!-- Navigation hide/show removed globally; navigation always visible -->
   <!-- Main Content -->
   <main class="main-content" id="mainContent">
     <div class="d-flex justify-content-between align-items-center mb-4">
@@ -1077,32 +1180,32 @@ function getReportIcon($reportType)
           <i class="fas fa-calendar-check"></i>
         </div>
         <div class="card-title"><span class="lang-text en">Upcoming Appointments</span><span class="lang-text bn">আসন্ন অ্যাপয়েন্টমেন্ট</span></div>
-        <div class="card-value"><?php echo $upcomingCount; ?></div>
-        <a href="#" class="card-link"><span class="lang-text en">View All</span><span class="lang-text bn">সব দেখুন</span> <i class="fas fa-arrow-right"></i></a>
+        <div class="card-value"><?php echo htmlspecialchars($upcomingCount); ?></div>
+        <a href="appointments.php" class="card-link"><span class="lang-text en">View All</span><span class="lang-text bn">সব দেখুন</span> <i class="fas fa-arrow-right"></i></a>
       </div>
       <div class="dashboard-card success">
         <div class="card-icon success">
           <i class="fas fa-file-medical"></i>
         </div>
         <div class="card-title"><span class="lang-text en">Health Records</span><span class="lang-text bn">স্বাস্থ্য রেকর্ড</span></div>
-        <div class="card-value"><?php echo $recordsCount; ?></div>
-        <a href="#" class="card-link"><span class="lang-text en">View All</span><span class="lang-text bn">সব দেখুন</span> <i class="fas fa-arrow-right"></i></a>
+        <div class="card-value"><?php echo htmlspecialchars($recordsCount); ?></div>
+        <a href="records.php" class="card-link"><span class="lang-text en">View All</span><span class="lang-text bn">সব দেখুন</span> <i class="fas fa-arrow-right"></i></a>
       </div>
       <div class="dashboard-card danger">
         <div class="card-icon danger">
           <i class="fas fa-pills"></i>
         </div>
         <div class="card-title"><span class="lang-text en">Active Prescriptions</span><span class="lang-text bn">সক্রিয় প্রেসক্রিপশন</span></div>
-        <div class="card-value"><?php echo $prescriptionsCount; ?></div>
-        <a href="#" class="card-link"><span class="lang-text en">View All</span><span class="lang-text bn">সব দেখুন</span> <i class="fas fa-arrow-right"></i></a>
+        <div class="card-value"><?php echo htmlspecialchars($prescriptionsCount); ?></div>
+        <a href="prescriptions.php" class="card-link"><span class="lang-text en">View All</span><span class="lang-text bn">সব দেখুন</span> <i class="fas fa-arrow-right"></i></a>
       </div>
       <div class="dashboard-card warning">
         <div class="card-icon warning">
           <i class="fas fa-heartbeat"></i>
         </div>
         <div class="card-title"><span class="lang-text en">Health Tips</span><span class="lang-text bn">স্বাস্থ্য টিপস</span></div>
-        <div class="card-value"><?php echo $healthTipsCount; ?></div>
-        <a href="#" class="card-link"><span class="lang-text en">View All</span><span class="lang-text bn">সব দেখুন</span> <i class="fas fa-arrow-right"></i></a>
+        <div class="card-value"><?php echo htmlspecialchars($healthTipsCount); ?></div>
+        <a href="health_tips.php" class="card-link"><span class="lang-text en">View All</span><span class="lang-text bn">সব দেখুন</span> <i class="fas fa-arrow-right"></i></a>
       </div>
     </div>
     <!-- Upcoming Appointments -->
@@ -1120,26 +1223,30 @@ function getReportIcon($reportType)
         </a>
       </div>
       <ul class="appointment-list">
-        <?php
-        if (count($upcomingAppointments) === 0) {
-          echo '<li class="appointment-item"><div class="appointment-details"><div class="appointment-doctor-name">No upcoming appointments</div></div></li>';
-        } else {
-          foreach ($upcomingAppointments as $a) {
-            $docImg = !empty($a['doctor_image']) ? (strpos($a['doctor_image'], '/') === 0 || preg_match('#^https?://#i', $a['doctor_image']) ? $a['doctor_image'] : dirname($_SERVER['SCRIPT_NAME']) . '/' . $a['doctor_image']) : 'https://via.placeholder.com/80';
-            $apptDate = date('d M Y', strtotime($a['appointment_date']));
-            $apptTime = date('g:i A', strtotime($a['appointment_time']));
-            echo '<li class="appointment-item">';
-            echo '<img src="' . htmlspecialchars($docImg) . '" alt="Doctor" class="appointment-doctor">';
-            echo '<div class="appointment-details">';
-            echo '<div class="appointment-doctor-name">' . htmlspecialchars($a['doctor_name']) . '</div>';
-            echo '<div class="appointment-info"><i class="fas fa-stethoscope"></i> ' . htmlspecialchars($a['specialization']) . '</div>';
-            echo '<div class="appointment-info"><i class="fas fa-calendar"></i> ' . $apptDate . ', ' . $apptTime . '</div>';
-            echo '</div>';
-            echo '<span class="appointment-status status-upcoming">Upcoming</span>';
-            echo '</li>';
-          }
-        }
-        ?>
+        <?php if (!empty($upcomingAppointments)): ?>
+          <?php foreach ($upcomingAppointments as $a):
+            $docName = $a['doctor_name'] ?? 'Doctor';
+            $docSpec = $a['specialization'] ?? '';
+            $docImg = !empty($a['doctor_image']) ? $a['doctor_image'] : 'https://randomuser.me/api/portraits/lego/1.jpg';
+            $date = date('d M Y', strtotime($a['appointment_date']));
+            $time = date('g:i A', strtotime($a['appointment_time']));
+            $status = $a['status'] ?? 'pending';
+          ?>
+            <li class="appointment-item">
+              <img src="<?php echo htmlspecialchars($docImg); ?>" alt="Doctor" class="appointment-doctor">
+              <div class="appointment-details">
+                <div class="appointment-doctor-name"><?php echo htmlspecialchars($docName); ?></div>
+                <div class="appointment-info"><i class="fas fa-stethoscope"></i> <?php echo htmlspecialchars($docSpec); ?></div>
+                <div class="appointment-info"><i class="fas fa-calendar"></i> <?php echo htmlspecialchars("$date, $time"); ?></div>
+              </div>
+              <span class="appointment-status <?php echo ($status === 'completed') ? 'status-completed' : (($status === 'cancelled') ? 'status-cancelled' : 'status-upcoming'); ?>"><span class="lang-text en"><?php echo ucfirst($status); ?></span></span>
+            </li>
+          <?php endforeach; ?>
+        <?php else: ?>
+          <li class="appointment-item">
+            <div class="appointment-details">No upcoming appointments.</div>
+          </li>
+        <?php endif; ?>
       </ul>
     </div>
     <!-- Health Records -->
@@ -1157,22 +1264,23 @@ function getReportIcon($reportType)
         </a>
       </div>
       <div class="health-records">
-        <?php
-        if (count($recentRecords) === 0) {
-          echo '<p class="text-center">No health records found.</p>';
-        } else {
-          foreach ($recentRecords as $record) {
-            $iconClass = getReportIcon($record['report_type']);
-            echo '<div class="record-card">';
-            echo '<div class="record-icon">';
-            echo '<i class="fas ' . $iconClass . '"></i>';
-            echo '</div>';
-            echo '<div class="record-title">' . htmlspecialchars($record['title']) . '</div>';
-            echo '<div class="record-date">' . date('d M Y', strtotime($record['created_at'])) . '</div>';
-            echo '</div>';
-          }
-        }
-        ?>
+        <?php if (!empty($recentRecords)): ?>
+          <?php foreach ($recentRecords as $r): ?>
+            <div class="record-card">
+              <div class="record-icon">
+                <i class="fas <?php echo htmlspecialchars(getReportIcon($r['report_type'] ?? '')); ?>"></i>
+              </div>
+              <div class="record-title"><?php echo htmlspecialchars($r['title']); ?></div>
+              <div class="record-date"><?php echo htmlspecialchars(date('d M Y', strtotime($r['created_at'] ?? 'now'))); ?></div>
+            </div>
+          <?php endforeach; ?>
+        <?php else: ?>
+          <div class="record-card">
+            <div class="record-icon"><i class="fas fa-file-medical"></i></div>
+            <div class="record-title">No records</div>
+            <div class="record-date">-</div>
+          </div>
+        <?php endif; ?>
       </div>
     </div>
   </main>
@@ -1273,7 +1381,7 @@ function getReportIcon($reportType)
       const topHeader = document.getElementById('topHeader');
       const mainHeader = document.getElementById('mainHeader');
       const mainContent = document.getElementById('mainContent');
-      // hide/show navigation removed — navigation always visible
+      const navToggleBtn = document.getElementById('navToggleBtn');
       const langToggle = document.getElementById('langToggle');
 
       // Function to open sidebar
@@ -1329,16 +1437,6 @@ function getReportIcon($reportType)
       document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape' && sidebar.classList.contains('active')) {
           closeSidebarFunc();
-        }
-
-        // Keyboard shortcut to toggle navigation (Ctrl+N)
-        if (e.ctrlKey && e.key === 'n') {
-          e.preventDefault();
-          if (topHeader.classList.contains('hidden')) {
-            showNavigation();
-          } else {
-            hideNavigation();
-          }
         }
       });
     });

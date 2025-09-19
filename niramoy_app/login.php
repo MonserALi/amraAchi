@@ -320,8 +320,6 @@
 </head>
 
 <body>
-  <!-- header intentionally removed for login/register page -->
-
   <!-- Alert Container -->
   <div class="alert-container" id="alertContainer"></div>
 
@@ -354,7 +352,7 @@
         <div class="tab-content" id="authTabsContent">
           <!-- Login Form -->
           <div class="tab-pane fade show active" id="login" role="tabpanel">
-            <form id="loginForm" method="POST" action="login_action.php">
+            <form id="loginForm">
               <div class="role-selector">
                 <label>Login as:</label>
                 <div class="role-options">
@@ -382,10 +380,10 @@
               </div>
 
               <div class="mb-3">
-                <input type="text" class="form-control" id="loginUsername" name="username" placeholder="Username" required>
+                <input type="text" class="form-control" id="loginUsername" placeholder="Username" required>
               </div>
               <div class="mb-3">
-                <input type="password" class="form-control" id="loginPassword" name="password" placeholder="Password" required>
+                <input type="password" class="form-control" id="loginPassword" placeholder="Password" required>
               </div>
               <input type="hidden" id="loginRole" name="role" value="patient">
               <div class="form-check">
@@ -482,7 +480,9 @@
 
   <!-- Footer -->
   <footer>
-    <?php include __DIR__ . '/inc/footer.php'; ?>
+    <div class="container">
+      <p>&copy; 2023 AmraAchi. All rights reserved.</p>
+    </div>
   </footer>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
@@ -496,9 +496,7 @@
         option.classList.add('selected');
         // Update hidden role inputs (login + register) if present
         const loginRoleInput = document.getElementById('loginRole');
-        const registerRoleInput = document.querySelector('#registerForm input[name="role"]');
         if (loginRoleInput) loginRoleInput.value = option.dataset.role;
-        if (registerRoleInput) registerRoleInput.value = option.dataset.role;
         // If this container is inside register tab, toggle doctor fields
         if (container.closest('#register')) {
           const doctorFields = document.getElementById('doctorFields');
@@ -554,7 +552,51 @@
       }, 5000);
     }
 
-    // Login handled by server-side form POST to login_action.php
+    // Login form submission
+    document.getElementById('loginForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+
+      const roleElement = document.querySelector('#login .role-option.selected');
+      if (!roleElement) {
+        showAlert('Please select a role', 'danger');
+        return;
+      }
+
+      const role = roleElement.dataset.role;
+      const username = document.getElementById('loginUsername').value;
+      const password = document.getElementById('loginPassword').value;
+
+      try {
+        const res = await fetch(`api.php?q=auth/login/${role}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            username,
+            password
+          })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          showAlert(data.error || 'Login failed. Please check your credentials.', 'danger');
+          return;
+        }
+
+        // Login successful
+        showAlert('Login successful! Redirecting...', 'success');
+
+        // Redirect based on response
+        setTimeout(() => {
+          window.location.href = data.redirect || 'dashboard.php';
+        }, 1500);
+      } catch (e) {
+        console.error(e);
+        showAlert('An error occurred during login. Please try again.', 'danger');
+      }
+    });
 
     // Register form submission
     document.getElementById('registerForm').addEventListener('submit', async function(e) {

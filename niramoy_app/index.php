@@ -1,4 +1,10 @@
-<?php require_once __DIR__ . '/inc/config.php'; ?>
+<?php
+// Prevent caching of pages so back button won't restore authenticated content after logout
+require_once __DIR__ . '/inc/config.php';
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+header('Expires: Sat, 26 Jul 1997 05:00:00 GMT');
+?>
 <!DOCTYPE html>
 <html lang="en">
 
@@ -185,6 +191,31 @@
   </section>
   <?php include __DIR__ . '/inc/footer.php'; ?>
 </body>
+
+<?php if (!empty($_GET['logged_out'])): ?>
+  <script>
+    // Show a floating confirmation on logout
+    document.addEventListener('DOMContentLoaded', function() {
+      var container = document.createElement('div');
+      container.style.position = 'fixed';
+      container.style.top = '20px';
+      container.style.right = '20px';
+      container.style.zIndex = 2000;
+      container.innerHTML = '<div style="background:#d4edda;color:#155724;padding:12px 16px;border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,0.12);display:flex;align-items:center;gap:10px;"><i class="fas fa-check-circle"></i><div>Successfully logged out.</div><button id="logoutConfirmClose" style="margin-left:10px;background:none;border:none;font-size:20px;cursor:pointer;">&times;</button></div>';
+      document.body.appendChild(container);
+      document.getElementById('logoutConfirmClose').addEventListener('click', function() {
+        container.remove();
+      });
+      setTimeout(function() {
+        if (container.parentNode) container.remove();
+      }, 5000);
+      // Replace state so back button doesn't return to a cached authenticated page
+      try {
+        window.history.replaceState({}, document.title, window.location.pathname);
+      } catch (e) {}
+    });
+  </script>
+<?php endif; ?>
 
 <script>
   // Fetch previews for departments and doctors with fallback

@@ -5,89 +5,249 @@ if (empty($_SESSION['user'])) {
   header('Location: login.php');
   exit;
 }
-$user = $_SESSION['user'];
 $pdo = get_db();
+$user = $_SESSION['user'];
 $userId = (int)($user['id'] ?? 0);
 
-// Get dashboard statistics
-// Upcoming Appointments Count
-$stmt = $pdo->prepare("SELECT COUNT(*) FROM appointments WHERE patient_id = :uid AND appointment_date >= CURDATE()");
+// Determine doctor id if exists
+$stmt = $pdo->prepare('SELECT id FROM doctors WHERE user_id = :uid LIMIT 1');
 $stmt->execute([':uid' => $userId]);
-$upcomingCount = $stmt->fetchColumn();
+$doctor = $stmt->fetch();
+$doctorId = $doctor ? (int)$doctor['id'] : null;
 
-// Health Records Count
-$stmt = $pdo->prepare("SELECT COUNT(*) FROM patient_reports WHERE patient_id = :uid");
-$stmt->execute([':uid' => $userId]);
-$recordsCount = $stmt->fetchColumn();
+// Today's appointments count for this doctor
+if ($doctorId) {
+  $stmt = $pdo->prepare('SELECT COUNT(*) FROM appointments WHERE doctor_id = :did AND appointment_date = CURDATE()');
+  $stmt->execute([':did' => $doctorId]);
+  $todayAppointments = (int)$stmt->fetchColumn();
+} else {
+  $todayAppointments = 0;
+}
 
-// Active Prescriptions Count
-$stmt = $pdo->prepare("
-    SELECT COUNT(*) 
-    FROM prescriptions 
-    WHERE patient_id = :uid 
-    AND (
-        (follow_up_date IS NOT NULL AND follow_up_date >= CURDATE())
-        OR
-        (follow_up_date IS NULL AND created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY))
-    )
-");
-$stmt->execute([':uid' => $userId]);
-$prescriptionsCount = $stmt->fetchColumn();
+// Total unique patients for this doctor
+if ($doctorId) {
+  $stmt = $pdo->prepare('SELECT COUNT(DISTINCT patient_id) FROM appointments WHERE doctor_id = :did');
+  $stmt->execute([':did' => $doctorId]);
+  $totalPatients = (int)$stmt->fetchColumn();
+} else {
+  $totalPatients = 0;
+}
 
-// Health Tips Count (static for now)
-$healthTipsCount = 5;
+// Upcoming appointments list (limit 5)
+if ($doctorId) {
+  $stmt = $pdo->prepare('SELECT a.*, u.name AS patient_name, u.profile_image AS patient_image FROM appointments a JOIN users u ON a.patient_id = u.id WHERE a.doctor_id = :did AND a.appointment_date >= CURDATE() ORDER BY a.appointment_date ASC, a.appointment_time ASC LIMIT 5');
+  $stmt->execute([':did' => $doctorId]);
+  $upcomingAppointments = $stmt->fetchAll();
+} else {
+  $upcomingAppointments = [];
+}
 
-// Get upcoming appointments
-$stmt = $pdo->prepare('SELECT a.*, d.id AS doctor_id, du.name AS doctor_name, du.profile_image AS doctor_image, d.specialization FROM appointments a JOIN doctors d ON a.doctor_id = d.id JOIN users du ON d.user_id = du.id WHERE a.patient_id = :uid AND a.appointment_date >= CURDATE() ORDER BY a.appointment_date ASC, a.appointment_time ASC LIMIT 2');
-$stmt->execute([':uid' => $userId]);
-$upcomingAppointments = $stmt->fetchAll();
-
-// Get recent health records
-$stmt = $pdo->prepare("
-    SELECT * 
-    FROM patient_reports 
-    WHERE patient_id = :uid 
-    ORDER BY created_at DESC 
-    LIMIT 4
-");
-$stmt->execute([':uid' => $userId]);
-$recentRecords = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-// Function to get report icon based on report type
-function getReportIcon($reportType)
+// Helper to check whether a column exists in the current database
+function columnExists($pdo, $table, $column)
 {
-  $reportType = strtolower($reportType);
-  switch ($reportType) {
-    case 'blood test':
-      return 'fa-tint';
-    case 'x-ray':
-      return 'fa-x-ray';
-    case 'urine test':
-      return 'fa-vial';
-    case 'prescription':
-      return 'fa-file-prescription';
-    case 'ecg':
-      return 'fa-heartbeat';
-    case 'mri':
-      return 'fa-microscope';
-    case 'ct scan':
-      return 'fa-x-ray';
-    default:
-      return 'fa-file-medical';
+  try {
+    $stmt = $pdo->prepare('SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :table AND COLUMN_NAME = :column');
+    $stmt->execute([':table' => $table, ':column' => $column]);
+    return (bool)$stmt->fetchColumn();
+  } catch (Exception $e) {
+    return false;
+  }
+}
+
+// Earnings summary (sum of consultation_fee * completed appointments) - robust across schemas
+$earnings = 0.0;
+if ($doctorId) {
+  try {
+    if (columnExists($pdo, 'appointments', 'consultation_fee')) {
+      $stmt = $pdo->prepare('SELECT COALESCE(SUM(consultation_fee),0) FROM appointments WHERE doctor_id = :did AND status = "completed"');
+      $stmt->execute([':did' => $doctorId]);
+      $earnings = (float)$stmt->fetchColumn();
+    } elseif (columnExists($pdo, 'doctors', 'consultation_fee')) {
+      $stmt = $pdo->prepare('SELECT COALESCE(SUM(d.consultation_fee),0) AS total_earnings FROM appointments a JOIN doctors d ON a.doctor_id = d.id WHERE a.doctor_id = :did AND a.status = "completed"');
+      $stmt->execute([':did' => $doctorId]);
+      $earnings = (float)$stmt->fetchColumn();
+    } else {
+      $earnings = 0.0;
+    }
+  } catch (Exception $e) {
+    $earnings = 0.0;
+  }
+} else {
+  $earnings = 0.0;
+}
+
+// Unread notifications for the user (wrapped in try/catch in case table doesn't exist)
+try {
+  $stmt = $pdo->prepare('SELECT COUNT(*) FROM notifications WHERE user_id = :uid AND is_read = 0');
+  $stmt->execute([':uid' => $userId]);
+  $unreadNotifications = (int)$stmt->fetchColumn();
+} catch (Exception $e) {
+  $unreadNotifications = 0;
+}
+
+// Pending reports assigned to this doctor (if table exists)
+if ($doctorId) {
+  try {
+    $stmt = $pdo->prepare('SELECT COUNT(*) FROM patient_reports WHERE doctor_id = :did AND status = "pending"');
+    $stmt->execute([':did' => $doctorId]);
+    $pendingReports = (int)$stmt->fetchColumn();
+  } catch (Exception $e) {
+    $pendingReports = 0;
+  }
+} else {
+  $pendingReports = 0;
+}
+
+// Consultations count (e.g., telemedicine or consultation records)
+if ($doctorId) {
+  try {
+    $stmt = $pdo->prepare('SELECT COUNT(*) FROM consultations WHERE doctor_id = :did');
+    $stmt->execute([':did' => $doctorId]);
+    $consultationsCount = (int)$stmt->fetchColumn();
+  } catch (Exception $e) {
+    // fallback: count appointments that had status 'consulted' or similar
+    $stmt = $pdo->prepare('SELECT COUNT(*) FROM appointments WHERE doctor_id = :did AND status IN ("consulted","completed")');
+    $stmt->execute([':did' => $doctorId]);
+    $consultationsCount = (int)$stmt->fetchColumn();
+  }
+} else {
+  $consultationsCount = 0;
+}
+
+// Earnings breakdown: month, week, today (robust)
+$earningsMonth = $earningsWeek = $earningsToday = 0.0;
+if ($doctorId) {
+  try {
+    if (columnExists($pdo, 'appointments', 'consultation_fee')) {
+      $stmt = $pdo->prepare('SELECT COALESCE(SUM(consultation_fee),0) FROM appointments WHERE doctor_id = :did AND status = "completed" AND YEAR(appointment_date) = YEAR(CURDATE()) AND MONTH(appointment_date) = MONTH(CURDATE())');
+      $stmt->execute([':did' => $doctorId]);
+      $earningsMonth = (float)$stmt->fetchColumn();
+
+      $stmt = $pdo->prepare('SELECT COALESCE(SUM(consultation_fee),0) FROM appointments WHERE doctor_id = :did AND status = "completed" AND YEARWEEK(appointment_date,1) = YEARWEEK(CURDATE(),1)');
+      $stmt->execute([':did' => $doctorId]);
+      $earningsWeek = (float)$stmt->fetchColumn();
+
+      $stmt = $pdo->prepare('SELECT COALESCE(SUM(consultation_fee),0) FROM appointments WHERE doctor_id = :did AND status = "completed" AND appointment_date = CURDATE()');
+      $stmt->execute([':did' => $doctorId]);
+      $earningsToday = (float)$stmt->fetchColumn();
+    } elseif (columnExists($pdo, 'doctors', 'consultation_fee')) {
+      // fallback: multiply doctor's fee by number of completed appointments in the period
+      $stmt = $pdo->prepare('SELECT COALESCE(SUM(d.consultation_fee),0) FROM appointments a JOIN doctors d ON a.doctor_id = d.id WHERE a.doctor_id = :did AND a.status = "completed" AND YEAR(a.appointment_date) = YEAR(CURDATE()) AND MONTH(a.appointment_date) = MONTH(CURDATE())');
+      $stmt->execute([':did' => $doctorId]);
+      $earningsMonth = (float)$stmt->fetchColumn();
+
+      $stmt = $pdo->prepare('SELECT COALESCE(SUM(d.consultation_fee),0) FROM appointments a JOIN doctors d ON a.doctor_id = d.id WHERE a.doctor_id = :did AND a.status = "completed" AND YEARWEEK(a.appointment_date,1) = YEARWEEK(CURDATE(),1)');
+      $stmt->execute([':did' => $doctorId]);
+      $earningsWeek = (float)$stmt->fetchColumn();
+
+      $stmt = $pdo->prepare('SELECT COALESCE(SUM(d.consultation_fee),0) FROM appointments a JOIN doctors d ON a.doctor_id = d.id WHERE a.doctor_id = :did AND a.status = "completed" AND a.appointment_date = CURDATE()');
+      $stmt->execute([':did' => $doctorId]);
+      $earningsToday = (float)$stmt->fetchColumn();
+    } else {
+      $earningsMonth = $earningsWeek = $earningsToday = 0.0;
+    }
+  } catch (Exception $e) {
+    $earningsMonth = $earningsWeek = $earningsToday = 0.0;
   }
 }
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Patient Dashboard - AmraAchi</title>
+  <title>Doctor Dashboard - AmraAchi</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
-    /* CSS remains the same as provided */
+    :root {
+      --primary-color: #1a5276;
+      --secondary-color: #2980b9;
+      --accent-color: #27ae60;
+      --emergency-color: #e74c3c;
+      --epidemic-color: #c0392b;
+      --light-bg: #ecf0f1;
+      --dark-text: #2c3e50;
+      --sidebar-width: 280px;
+      --card-shadow: 0 10px 20px rgba(0, 0, 0, 0.05);
+      --hover-shadow: 0 15px 30px rgba(0, 0, 0, 0.1);
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #f5f7fa 0%, #e4eaf5 100%);
+      color: var(--dark-text);
+      overflow-x: hidden;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ===== TOP HEADER ===== */
+    .top-header {
+      background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+      color: white;
+      padding: 10px 0;
+      position: relative;
+      z-index: 1000;
+      transition: transform 0.3s ease, opacity 0.3s ease;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+
+    .top-header.hidden {
+      transform: translateY(-100%);
+      opacity: 0;
+    }
+
+    .contact-info span {
+      margin-right: 20px;
+      font-size: 14px;
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .contact-info i {
+      margin-right: 5px;
+    }
+
+    .social-icons a {
+      color: white;
+      margin-left: 15px;
+      transition: all 0.3s;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .social-icons a:hover {
+      color: var(--light-bg);
+      transform: translateY(-2px);
+      background-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .lang-toggle {
+      background-color: rgba(255, 255, 255, 0.2);
+      border: none;
+      color: white;
+      padding: 5px 15px;
+      border-radius: 20px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.3s;
+      font-weight: 500;
+    }
+
+    .lang-toggle:hover {
+      background-color: rgba(255, 255, 255, 0.3);
+      transform: scale(1.05);
+    }
+
     /* ===== MAIN HEADER ===== */
     .main-header {
       background-color: white;
@@ -264,8 +424,8 @@ function getReportIcon($reportType)
       }
     }
 
-    .emergency-btn {
-      background: linear-gradient(135deg, var(--emergency-color), #c0392b);
+    .availability-toggle {
+      background-color: var(--accent-color);
       color: white;
       border: none;
       padding: 8px 15px;
@@ -273,15 +433,21 @@ function getReportIcon($reportType)
       font-weight: 600;
       transition: all 0.3s;
       margin-left: 10px;
-      box-shadow: 0 4px 8px rgba(231, 76, 60, 0.3);
       display: flex;
       align-items: center;
     }
 
-    .emergency-btn:hover {
-      background: linear-gradient(135deg, #c0392b, var(--emergency-color));
+    .availability-toggle:hover {
+      background-color: #229954;
       transform: translateY(-2px);
-      box-shadow: 0 6px 12px rgba(231, 76, 60, 0.4);
+    }
+
+    .availability-toggle.busy {
+      background-color: var(--emergency-color);
+    }
+
+    .availability-toggle.busy:hover {
+      background-color: #c0392b;
     }
 
     /* ===== SIDEBAR ===== */
@@ -521,28 +687,24 @@ function getReportIcon($reportType)
       font-weight: 700;
       margin-bottom: 10px;
       background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
-      background-clip: text;
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
 
     .dashboard-card.success .card-value {
       background: linear-gradient(135deg, var(--accent-color), #2ecc71);
-      background-clip: text;
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
 
     .dashboard-card.danger .card-value {
       background: linear-gradient(135deg, var(--emergency-color), #e74c3c);
-      background-clip: text;
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
 
     .dashboard-card.warning .card-value {
       background: linear-gradient(135deg, #f39c12, #f1c40f);
-      background-clip: text;
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
@@ -643,7 +805,7 @@ function getReportIcon($reportType)
       border-bottom: none;
     }
 
-    .appointment-doctor {
+    .appointment-patient {
       width: 60px;
       height: 60px;
       border-radius: 50%;
@@ -656,7 +818,7 @@ function getReportIcon($reportType)
       flex: 1;
     }
 
-    .appointment-doctor-name {
+    .appointment-patient-name {
       font-weight: 600;
       margin-bottom: 5px;
       color: var(--primary-color);
@@ -698,8 +860,40 @@ function getReportIcon($reportType)
       color: var(--emergency-color);
     }
 
-    /* ===== HEALTH RECORDS ===== */
-    .health-records {
+    .appointment-actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    .appointment-action-btn {
+      padding: 5px 10px;
+      border-radius: 5px;
+      border: none;
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    .btn-view {
+      background-color: var(--primary-color);
+      color: white;
+    }
+
+    .btn-view:hover {
+      background-color: var(--secondary-color);
+    }
+
+    .btn-prescribe {
+      background-color: var(--accent-color);
+      color: white;
+    }
+
+    .btn-prescribe:hover {
+      background-color: #229954;
+    }
+
+    /* ===== PATIENT RECORDS ===== */
+    .patient-records {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
       gap: 15px;
@@ -724,7 +918,6 @@ function getReportIcon($reportType)
       font-size: 2.5rem;
       margin-bottom: 15px;
       background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
-      background-clip: text;
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
@@ -737,6 +930,32 @@ function getReportIcon($reportType)
 
     .record-date {
       font-size: 0.8rem;
+      color: #666;
+    }
+
+    /* ===== EARNINGS SUMMARY ===== */
+    .earnings-summary {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .earnings-item {
+      text-align: center;
+      flex: 1;
+    }
+
+    .earnings-value {
+      font-size: 2rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--accent-color), #2ecc71);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .earnings-label {
+      font-size: 0.9rem;
       color: #666;
     }
 
@@ -972,29 +1191,13 @@ function getReportIcon($reportType)
       }
     }
 
-    /* Desktop: show sidebar and offset content */
-    @media (min-width: 992px) {
-      .sidebar {
-        transform: translateX(0);
-      }
-
-      .main-content {
-        margin-left: var(--sidebar-width);
-      }
-
-      .nav-toggle-btn,
-      .show-nav-btn {
-        display: none;
-      }
-    }
-
     @media (max-width: 768px) {
       .contact-info span {
         display: block;
         margin-bottom: 5px;
       }
 
-      .health-records {
+      .patient-records {
         grid-template-columns: 1fr;
       }
 
@@ -1007,25 +1210,106 @@ function getReportIcon($reportType)
         margin-bottom: 30px;
       }
     }
-
-    /* CSS Variables */
-    :root {
-      --primary-color: #1a5276;
-      --secondary-color: #2980b9;
-      --accent-color: #27ae60;
-      --emergency-color: #e74c3c;
-      --epidemic-color: #c0392b;
-      --light-bg: #ecf0f1;
-      --dark-text: #2c3e50;
-      --section-bg: #f8f9fa;
-      --sidebar-width: 250px;
-      --card-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
-      --hover-shadow: 0 15px 30px rgba(0, 0, 0, 0.1);
-    }
   </style>
 </head>
 
 <body>
+  <!-- Top Header -->
+  <div class="top-header" id="topHeader">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-6">
+          <div class="contact-info">
+            <span><i class="fas fa-phone-alt"></i> <span class="lang-text en">+880 1234 567890</span><span class="lang-text bn">+৮৮০ ১২৩৪ ৫৬৭৮৯০</span></span>
+            <span><i class="fas fa-envelope"></i> <span class="lang-text en">info@amraaichi.com</span><span class="lang-text bn">info@amraaichi.com</span></span>
+          </div>
+        </div>
+        <div class="col-md-6 text-end">
+          <button class="lang-toggle" id="langToggle">
+            <span class="lang-text en">বাংলা</span>
+            <span class="lang-text bn">English</span>
+          </button>
+          <div class="social-icons d-inline-block ms-3">
+            <a href="#"><i class="fab fa-facebook-f"></i></a>
+            <a href="#"><i class="fab fa-twitter"></i></a>
+            <a href="#"><i class="fab fa-instagram"></i></a>
+            <a href="#"><i class="fab fa-linkedin-in"></i></a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- Main Header -->
+  <header class="main-header" id="mainHeader">
+    <div class="container">
+      <div class="d-flex justify-content-between align-items-center">
+        <div class="d-flex align-items-center">
+          <button class="menu-toggle" id="menuToggle" aria-label="Toggle navigation">
+            <i class="fas fa-bars"></i>
+          </button>
+          <a class="navbar-brand" href="index.html">
+            <i class="fas fa-heartbeat"></i>
+            <span class="lang-text en">AmraAchi</span>
+            <span class="lang-text bn">আমরাআছি</span>
+          </a>
+        </div>
+        <div class="d-flex align-items-center">
+          <div class="notification-icon">
+            <i class="fas fa-bell"></i>
+            <span class="notification-badge">5</span>
+          </div>
+          <div class="user-profile-nav">
+            <?php
+            // Determine display name and avatar from session or doctor record
+            $displayName = htmlspecialchars($user['name'] ?? 'Doctor');
+            $displaySpecialty = '';
+            $avatar = 'assets/images/default-avatar.png';
+            // try to get doctor-specific info
+            if (!empty($doctorId)) {
+              try {
+                $stmt = $pdo->prepare('SELECT d.*, u.name AS user_name, u.profile_image FROM doctors d LEFT JOIN users u ON d.user_id = u.id WHERE d.id = :did LIMIT 1');
+                $stmt->execute([':did' => $doctorId]);
+                $docRow = $stmt->fetch();
+                if ($docRow) {
+                  $displayName = htmlspecialchars($docRow['user_name'] ?? $displayName);
+                  if (!empty($docRow['specialization'])) $displaySpecialty = htmlspecialchars($docRow['specialization']);
+                  if (!empty($docRow['profile_image'])) $avatar = htmlspecialchars($docRow['profile_image']);
+                }
+              } catch (Exception $e) {
+                // keep defaults
+              }
+            } else {
+              if (!empty($user['profile_image'])) $avatar = htmlspecialchars($user['profile_image']);
+            }
+            ?>
+            <img src="<?php echo $avatar; ?>" alt="User" class="user-avatar-nav">
+            <div class="user-info-nav">
+              <h4><span class="lang-text en"><?php echo $displayName; ?></span></h4>
+              <p><span class="lang-text en"><?php echo $displaySpecialty ? $displaySpecialty : ''; ?></span></p>
+            </div>
+            <div class="dropdown">
+              <button class="dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="fas fa-chevron-down"></i>
+              </button>
+              <ul class="dropdown-menu dropdown-menu-end">
+                <li><a class="dropdown-item" href="#"><i class="fas fa-user me-2"></i> <span class="lang-text en">Profile</span><span class="lang-text bn">প্রোফাইল</span></a></li>
+                <li><a class="dropdown-item" href="#"><i class="fas fa-cog me-2"></i> <span class="lang-text en">Settings</span><span class="lang-text bn">সেটিংস</span></a></li>
+                <li>
+                  <hr class="dropdown-divider">
+                </li>
+                <li><a class="dropdown-item" href="logout.php"><i class="fas fa-sign-out-alt me-2"></i> <span class="lang-text en">Logout</span><span class="lang-text bn">লগআউট</span></a></li>
+              </ul>
+            </div>
+          </div>
+          <button class="availability-toggle" id="availabilityToggle">
+            <i class="fas fa-circle me-2"></i>
+            <span class="lang-text en">Available</span>
+            <span class="lang-text bn">উপলব্ধ</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
   <!-- Sidebar -->
   <aside class="sidebar" id="sidebar" aria-label="Main navigation">
     <div class="sidebar-header">
@@ -1040,15 +1324,13 @@ function getReportIcon($reportType)
     </div>
     <nav>
       <ul class="sidebar-menu">
-        <li><a href="index.php"><i class="fas fa-house"></i> <span class="lang-text en">Home</span><span class="lang-text bn">হোম</span></a></li>
         <li><a href="#" class="active"><i class="fas fa-home"></i> <span class="lang-text en">Dashboard</span><span class="lang-text bn">ড্যাশবোর্ড</span></a></li>
-        <li><a href="chat.php"><i class="fas fa-comments"></i> <span class="lang-text en">Chat</span><span class="lang-text bn">চ্যাট</span></a></li>
         <li><a href="#"><i class="fas fa-calendar-check"></i> <span class="lang-text en">Appointments</span><span class="lang-text bn">অ্যাপয়েন্টমেন্ট</span></a></li>
-        <li><a href="#"><i class="fas fa-user-md"></i> <span class="lang-text en">Find Doctors</span><span class="lang-text bn">ডাক্তার খুঁজুন</span></a></li>
-        <li><a href="#"><i class="fas fa-file-medical"></i> <span class="lang-text en">Health Records</span><span class="lang-text bn">স্বাস্থ্য রেকর্ড</span></a></li>
+        <li><a href="#"><i class="fas fa-users"></i> <span class="lang-text en">Patients</span><span class="lang-text bn">রোগী</span></a></li>
+        <li><a href="#"><i class="fas fa-file-medical"></i> <span class="lang-text en">Medical Records</span><span class="lang-text bn">মেডিকেল রেকর্ড</span></a></li>
         <li><a href="#"><i class="fas fa-pills"></i> <span class="lang-text en">Prescriptions</span><span class="lang-text bn">প্রেসক্রিপশন</span></a></li>
-        <li><a href="#"><i class="fas fa-hospital"></i> <span class="lang-text en">Hospitals</span><span class="lang-text bn">হাসপাতাল</span></a></li>
-        <li><a href="#"><i class="fas fa-ambulance"></i> <span class="lang-text en">Emergency</span><span class="lang-text bn">জরুরি</span></a></li>
+        <li><a href="#"><i class="fas fa-comments"></i> <span class="lang-text en">Consultations</span><span class="lang-text bn">পরামর্শ</span></a></li>
+        <li><a href="#"><i class="fas fa-chart-line"></i> <span class="lang-text en">Earnings</span><span class="lang-text bn">আয়</span></a></li>
         <li><a href="#"><i class="fas fa-user"></i> <span class="lang-text en">Profile</span><span class="lang-text bn">প্রোফাইল</span></a></li>
         <li><a href="#"><i class="fas fa-cog"></i> <span class="lang-text en">Settings</span><span class="lang-text bn">সেটিংস</span></a></li>
         <li>
@@ -1067,7 +1349,7 @@ function getReportIcon($reportType)
   <!-- Main Content -->
   <main class="main-content" id="mainContent">
     <div class="d-flex justify-content-between align-items-center mb-4">
-      <h1><span class="lang-text en">Patient Dashboard</span><span class="lang-text bn">রোগী ড্যাশবোর্ড</span></h1>
+      <h1><span class="lang-text en">Doctor Dashboard</span><span class="lang-text bn">ডাক্তার ড্যাশবোর্ড</span></h1>
       <!-- Hide navigation removed; navigation always visible -->
     </div>
     <!-- Dashboard Cards -->
@@ -1076,42 +1358,71 @@ function getReportIcon($reportType)
         <div class="card-icon primary">
           <i class="fas fa-calendar-check"></i>
         </div>
-        <div class="card-title"><span class="lang-text en">Upcoming Appointments</span><span class="lang-text bn">আসন্ন অ্যাপয়েন্টমেন্ট</span></div>
-        <div class="card-value"><?php echo $upcomingCount; ?></div>
-        <a href="#" class="card-link"><span class="lang-text en">View All</span><span class="lang-text bn">সব দেখুন</span> <i class="fas fa-arrow-right"></i></a>
+        <div class="card-title"><span class="lang-text en">Today's Appointments</span><span class="lang-text bn">আজকের অ্যাপয়েন্টমেন্ট</span></div>
+        <div class="card-value"><?php echo isset($todayAppointments) ? (int)$todayAppointments : 0; ?></div>
+        <a href="appointments.php" class="card-link"><span class="lang-text en">View All</span><span class="lang-text bn">সব দেখুন</span> <i class="fas fa-arrow-right"></i></a>
       </div>
       <div class="dashboard-card success">
         <div class="card-icon success">
-          <i class="fas fa-file-medical"></i>
+          <i class="fas fa-users"></i>
         </div>
-        <div class="card-title"><span class="lang-text en">Health Records</span><span class="lang-text bn">স্বাস্থ্য রেকর্ড</span></div>
-        <div class="card-value"><?php echo $recordsCount; ?></div>
-        <a href="#" class="card-link"><span class="lang-text en">View All</span><span class="lang-text bn">সব দেখুন</span> <i class="fas fa-arrow-right"></i></a>
+        <div class="card-title"><span class="lang-text en">Total Patients</span><span class="lang-text bn">মোট রোগী</span></div>
+        <div class="card-value"><?php echo isset($totalPatients) ? (int)$totalPatients : 0; ?></div>
+        <a href="patients.php" class="card-link"><span class="lang-text en">View All</span><span class="lang-text bn">সব দেখুন</span> <i class="fas fa-arrow-right"></i></a>
       </div>
       <div class="dashboard-card danger">
         <div class="card-icon danger">
-          <i class="fas fa-pills"></i>
+          <i class="fas fa-file-medical"></i>
         </div>
-        <div class="card-title"><span class="lang-text en">Active Prescriptions</span><span class="lang-text bn">সক্রিয় প্রেসক্রিপশন</span></div>
-        <div class="card-value"><?php echo $prescriptionsCount; ?></div>
-        <a href="#" class="card-link"><span class="lang-text en">View All</span><span class="lang-text bn">সব দেখুন</span> <i class="fas fa-arrow-right"></i></a>
+        <div class="card-title"><span class="lang-text en">Pending Reports</span><span class="lang-text bn">মুলতুবি রিপোর্ট</span></div>
+        <div class="card-value"><?php echo isset($pendingReports) ? (int)$pendingReports : 0; ?></div>
+        <a href="reports.php" class="card-link"><span class="lang-text en">View All</span><span class="lang-text bn">সব দেখুন</span> <i class="fas fa-arrow-right"></i></a>
       </div>
       <div class="dashboard-card warning">
         <div class="card-icon warning">
-          <i class="fas fa-heartbeat"></i>
+          <i class="fas fa-comments"></i>
         </div>
-        <div class="card-title"><span class="lang-text en">Health Tips</span><span class="lang-text bn">স্বাস্থ্য টিপস</span></div>
-        <div class="card-value"><?php echo $healthTipsCount; ?></div>
-        <a href="#" class="card-link"><span class="lang-text en">View All</span><span class="lang-text bn">সব দেখুন</span> <i class="fas fa-arrow-right"></i></a>
+        <div class="card-title"><span class="lang-text en">Consultations</span><span class="lang-text bn">পরামর্শ</span></div>
+        <div class="card-value"><?php echo isset($consultationsCount) ? (int)$consultationsCount : 0; ?></div>
+        <a href="consultations.php" class="card-link"><span class="lang-text en">View All</span><span class="lang-text bn">সব দেখুন</span> <i class="fas fa-arrow-right"></i></a>
       </div>
     </div>
-    <!-- Upcoming Appointments -->
+    <!-- Earnings Summary -->
+    <div class="content-section">
+      <div class="section-header">
+        <h2 class="section-title">
+          <i class="fas fa-chart-line"></i>
+          <span class="lang-text en">Earnings Summary</span>
+          <span class="lang-text bn">আয় সারসংক্ষেপ</span>
+        </h2>
+        <a href="#" class="section-link">
+          <span class="lang-text en">View Details</span>
+          <span class="lang-text bn">বিস্তারিত দেখুন</span>
+          <i class="fas fa-arrow-right"></i>
+        </a>
+      </div>
+      <div class="earnings-summary">
+        <div class="earnings-item">
+          <div class="earnings-value">৳<?php echo number_format((float)$earningsMonth, 0); ?></div>
+          <div class="earnings-label"><span class="lang-text en">This Month</span><span class="lang-text bn">এই মাসে</span></div>
+        </div>
+        <div class="earnings-item">
+          <div class="earnings-value">৳<?php echo number_format((float)$earningsWeek, 0); ?></div>
+          <div class="earnings-label"><span class="lang-text en">This Week</span><span class="lang-text bn">এই সপ্তাহে</span></div>
+        </div>
+        <div class="earnings-item">
+          <div class="earnings-value">৳<?php echo number_format((float)$earningsToday, 0); ?></div>
+          <div class="earnings-label"><span class="lang-text en">Today</span><span class="lang-text bn">আজ</span></div>
+        </div>
+      </div>
+    </div>
+    <!-- Today's Appointments -->
     <div class="content-section">
       <div class="section-header">
         <h2 class="section-title">
           <i class="fas fa-calendar-check"></i>
-          <span class="lang-text en">Upcoming Appointments</span>
-          <span class="lang-text bn">আসন্ন অ্যাপয়েন্টমেন্ট</span>
+          <span class="lang-text en">Today's Appointments</span>
+          <span class="lang-text bn">আজকের অ্যাপয়েন্টমেন্ট</span>
         </h2>
         <a href="#" class="section-link">
           <span class="lang-text en">View All</span>
@@ -1120,35 +1431,43 @@ function getReportIcon($reportType)
         </a>
       </div>
       <ul class="appointment-list">
-        <?php
-        if (count($upcomingAppointments) === 0) {
-          echo '<li class="appointment-item"><div class="appointment-details"><div class="appointment-doctor-name">No upcoming appointments</div></div></li>';
-        } else {
-          foreach ($upcomingAppointments as $a) {
-            $docImg = !empty($a['doctor_image']) ? (strpos($a['doctor_image'], '/') === 0 || preg_match('#^https?://#i', $a['doctor_image']) ? $a['doctor_image'] : dirname($_SERVER['SCRIPT_NAME']) . '/' . $a['doctor_image']) : 'https://via.placeholder.com/80';
-            $apptDate = date('d M Y', strtotime($a['appointment_date']));
-            $apptTime = date('g:i A', strtotime($a['appointment_time']));
-            echo '<li class="appointment-item">';
-            echo '<img src="' . htmlspecialchars($docImg) . '" alt="Doctor" class="appointment-doctor">';
-            echo '<div class="appointment-details">';
-            echo '<div class="appointment-doctor-name">' . htmlspecialchars($a['doctor_name']) . '</div>';
-            echo '<div class="appointment-info"><i class="fas fa-stethoscope"></i> ' . htmlspecialchars($a['specialization']) . '</div>';
-            echo '<div class="appointment-info"><i class="fas fa-calendar"></i> ' . $apptDate . ', ' . $apptTime . '</div>';
-            echo '</div>';
-            echo '<span class="appointment-status status-upcoming">Upcoming</span>';
-            echo '</li>';
-          }
-        }
-        ?>
+        <?php if (!empty($upcomingAppointments)): ?>
+          <?php foreach ($upcomingAppointments as $appt):
+            $patientName = htmlspecialchars($appt['patient_name'] ?? 'Unknown');
+            $patientImage = !empty($appt['patient_image']) ? htmlspecialchars($appt['patient_image']) : 'assets/images/default-avatar.png';
+            $time = isset($appt['appointment_time']) ? date('g:i A', strtotime($appt['appointment_time'])) : '';
+            $date = isset($appt['appointment_date']) ? date('M j, Y', strtotime($appt['appointment_date'])) : '';
+            $type = htmlspecialchars($appt['type'] ?? ($appt['reason'] ?? 'Appointment'));
+          ?>
+            <li class="appointment-item">
+              <img src="<?php echo $patientImage; ?>" alt="Patient" class="appointment-patient">
+              <div class="appointment-details">
+                <div class="appointment-patient-name"><span class="lang-text en"><?php echo $patientName; ?></span></div>
+                <div class="appointment-info"><i class="fas fa-clock"></i> <span class="lang-text en"><?php echo $time; ?> <?php echo $date ? '- ' . $date : ''; ?></span></div>
+                <div class="appointment-info"><i class="fas fa-stethoscope"></i> <span class="lang-text en"><?php echo $type; ?></span></div>
+              </div>
+              <div class="appointment-actions">
+                <a href="view_appointment.php?id=<?php echo (int)$appt['id']; ?>" class="appointment-action-btn btn-view"><span class="lang-text en">View</span></a>
+                <a href="prescribe.php?appointment_id=<?php echo (int)$appt['id']; ?>" class="appointment-action-btn btn-prescribe"><span class="lang-text en">Prescribe</span></a>
+              </div>
+            </li>
+          <?php endforeach; ?>
+        <?php else: ?>
+          <li class="appointment-item">
+            <div class="appointment-details">
+              <div class="appointment-patient-name"><span class="lang-text en">No upcoming appointments</span><span class="lang-text bn">কোনও আগাম অ্যাপয়েন্টমেন্ট নেই</span></div>
+            </div>
+          </li>
+        <?php endif; ?>
       </ul>
     </div>
-    <!-- Health Records -->
+    <!-- Recent Patient Records -->
     <div class="content-section">
       <div class="section-header">
         <h2 class="section-title">
           <i class="fas fa-file-medical"></i>
-          <span class="lang-text en">Recent Health Records</span>
-          <span class="lang-text bn">সাম্প্রতিক স্বাস্থ্য রেকর্ড</span>
+          <span class="lang-text en">Recent Patient Records</span>
+          <span class="lang-text bn">সাম্প্রতিক রোগী রেকর্ড</span>
         </h2>
         <a href="#" class="section-link">
           <span class="lang-text en">View All</span>
@@ -1156,23 +1475,39 @@ function getReportIcon($reportType)
           <i class="fas fa-arrow-right"></i>
         </a>
       </div>
-      <div class="health-records">
-        <?php
-        if (count($recentRecords) === 0) {
-          echo '<p class="text-center">No health records found.</p>';
-        } else {
-          foreach ($recentRecords as $record) {
-            $iconClass = getReportIcon($record['report_type']);
-            echo '<div class="record-card">';
-            echo '<div class="record-icon">';
-            echo '<i class="fas ' . $iconClass . '"></i>';
-            echo '</div>';
-            echo '<div class="record-title">' . htmlspecialchars($record['title']) . '</div>';
-            echo '<div class="record-date">' . date('d M Y', strtotime($record['created_at'])) . '</div>';
-            echo '</div>';
-          }
-        }
-        ?>
+      <div class="patient-records">
+        <div class="record-card">
+          <div class="record-icon">
+            <i class="fas fa-heartbeat"></i>
+          </div>
+          <div class="record-title"><span class="lang-text en">ECG Report</span><span class="lang-text bn">ইসিজি রিপোর্ট</span></div>
+          <div class="record-date"><span class="lang-text en">Fatima Rahman</span><span class="lang-text bn">ফাতেমা রহমান</span></div>
+          <div class="record-date"><span class="lang-text en">10 Dec 2023</span><span class="lang-text bn">১০ ডিসেম্বর ২০২৩</span></div>
+        </div>
+        <div class="record-card">
+          <div class="record-icon">
+            <i class="fas fa-x-ray"></i>
+          </div>
+          <div class="record-title"><span class="lang-text en">Chest X-Ray</span><span class="lang-text bn">বুকের এক্স-রে</span></div>
+          <div class="record-date"><span class="lang-text en">Mohammad Ali</span><span class="lang-text bn">মোহাম্মদ আলী</span></div>
+          <div class="record-date"><span class="lang-text en">8 Dec 2023</span><span class="lang-text bn">৮ ডিসেম্বর ২০২৩</span></div>
+        </div>
+        <div class="record-card">
+          <div class="record-icon">
+            <i class="fas fa-vial"></i>
+          </div>
+          <div class="record-title"><span class="lang-text en">Blood Test</span><span class="lang-text bn">রক্ত পরীক্ষা</span></div>
+          <div class="record-date"><span class="lang-text en">Nusrat Jahan</span><span class="lang-text bn">নুসরাত জাহান</span></div>
+          <div class="record-date"><span class="lang-text en">5 Dec 2023</span><span class="lang-text bn">৫ ডিসেম্বর ২০২৩</span></div>
+        </div>
+        <div class="record-card">
+          <div class="record-icon">
+            <i class="fas fa-file-prescription"></i>
+          </div>
+          <div class="record-title"><span class="lang-text en">Prescription</span><span class="lang-text bn">প্রেসক্রিপশন</span></div>
+          <div class="record-date"><span class="lang-text en">Karim Ahmed</span><span class="lang-text bn">করিম আহমেদ</span></div>
+          <div class="record-date"><span class="lang-text en">3 Dec 2023</span><span class="lang-text bn">৩ ডিসেম্বর ২০২৩</span></div>
+        </div>
       </div>
     </div>
   </main>
@@ -1275,6 +1610,7 @@ function getReportIcon($reportType)
       const mainContent = document.getElementById('mainContent');
       // hide/show navigation removed — navigation always visible
       const langToggle = document.getElementById('langToggle');
+      const availabilityToggle = document.getElementById('availabilityToggle');
 
       // Function to open sidebar
       function openSidebar() {
@@ -1315,6 +1651,19 @@ function getReportIcon($reportType)
         });
       }
 
+      // Availability toggle functionality
+      if (availabilityToggle) {
+        availabilityToggle.addEventListener('click', function() {
+          this.classList.toggle('busy');
+          const isBangla = document.body.classList.contains('bn');
+          if (this.classList.contains('busy')) {
+            this.innerHTML = '<i class="fas fa-circle me-2"></i><span class="lang-text en">Busy</span><span class="lang-text bn">ব্যস্ত</span>';
+          } else {
+            this.innerHTML = '<i class="fas fa-circle me-2"></i><span class="lang-text en">Available</span><span class="lang-text bn">উপলব্ধ</span>';
+          }
+        });
+      }
+
       // Close sidebar when clicking on a link (optional, for better UX)
       const sidebarLinks = document.querySelectorAll('.sidebar-menu a');
       sidebarLinks.forEach(link => {
@@ -1330,32 +1679,7 @@ function getReportIcon($reportType)
         if (e.key === 'Escape' && sidebar.classList.contains('active')) {
           closeSidebarFunc();
         }
-
-        // Keyboard shortcut to toggle navigation (Ctrl+N)
-        if (e.ctrlKey && e.key === 'n') {
-          e.preventDefault();
-          if (topHeader.classList.contains('hidden')) {
-            showNavigation();
-          } else {
-            hideNavigation();
-          }
-        }
       });
-    });
-
-    // Emergency Button
-    document.addEventListener('DOMContentLoaded', function() {
-      const emergencyBtn = document.querySelector('.emergency-btn');
-      if (emergencyBtn) {
-        emergencyBtn.addEventListener('click', () => {
-          const isBangla = document.body.classList.contains('bn');
-          if (isBangla) {
-            alert('জরুরি পরিষেবা জানানো হয়েছে। একটি অ্যাম্বুলেন্স পথে আছে!');
-          } else {
-            alert('Emergency services have been notified. An ambulance is on the way!');
-          }
-        });
-      }
     });
   </script>
 </body>

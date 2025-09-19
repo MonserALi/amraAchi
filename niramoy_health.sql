@@ -358,6 +358,86 @@ CREATE TABLE `nurse_slots` (
     CONSTRAINT `chk_nurse_time_order` CHECK (`end_time` > `start_time`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
+-- Driver trips table
+CREATE TABLE driver_trips (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    driver_id INT NOT NULL,
+    patient_id INT NOT NULL,
+    hospital_id INT NOT NULL,
+    pickup_location VARCHAR(255) NOT NULL,
+    destination VARCHAR(255),
+    status ENUM(
+        'pending',
+        'accepted',
+        'in_progress',
+        'completed',
+        'cancelled'
+    ) DEFAULT 'pending',
+    distance DECIMAL(10, 2),
+    duration VARCHAR(50),
+    fare DECIMAL(10, 2),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    completed_at TIMESTAMP NULL,
+    FOREIGN KEY (driver_id) REFERENCES users (id),
+    FOREIGN KEY (patient_id) REFERENCES users (id),
+    FOREIGN KEY (hospital_id) REFERENCES hospitals (id)
+);
+
+-- Emergency requests table
+CREATE TABLE emergency_requests (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    patient_id INT NOT NULL,
+    hospital_id INT NOT NULL,
+    location VARCHAR(255) NOT NULL,
+    priority ENUM(
+        'critical',
+        'urgent',
+        'normal'
+    ) DEFAULT 'normal',
+    status ENUM(
+        'pending',
+        'accepted',
+        'in_progress',
+        'completed',
+        'cancelled'
+    ) DEFAULT 'pending',
+    driver_id INT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (patient_id) REFERENCES users (id),
+    FOREIGN KEY (hospital_id) REFERENCES hospitals (id),
+    FOREIGN KEY (driver_id) REFERENCES users (id)
+);
+
+-- Vehicles table
+CREATE TABLE vehicles (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    driver_id INT NOT NULL,
+    model VARCHAR(100),
+    license_plate VARCHAR(50),
+    fuel_level INT DEFAULT 100,
+    odometer INT DEFAULT 0,
+    vehicle_condition ENUM(
+        'excellent',
+        'good',
+        'fair',
+        'poor'
+    ) DEFAULT 'good',
+    next_service_date DATE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (driver_id) REFERENCES users (id)
+);
+
+-- Driver status table
+CREATE TABLE driver_status (
+    driver_id INT PRIMARY KEY,
+    status ENUM('online', 'offline') DEFAULT 'offline',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (driver_id) REFERENCES users (id)
+);
+
 CREATE TABLE `appointment_slots` (
     `id` int(11) NOT NULL AUTO_INCREMENT,
     `doctor_id` int(11) NOT NULL,
@@ -639,6 +719,40 @@ CREATE TABLE `ambulances` (
     KEY `hospital_id` (`hospital_id`),
     CONSTRAINT `ambulances_ibfk_1` FOREIGN KEY (`hospital_id`) REFERENCES `hospitals` (`id`) ON DELETE CASCADE
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- Drivers table
+CREATE TABLE IF NOT EXISTS drivers (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    license_number VARCHAR(100),
+    vehicle_id INT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users (id)
+);
+
+-- Nurses table
+CREATE TABLE IF NOT EXISTS nurses (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    license_number VARCHAR(100),
+    department_id INT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users (id),
+    FOREIGN KEY (department_id) REFERENCES departments (id)
+);
+
+-- Hospital admins table
+CREATE TABLE IF NOT EXISTS hospital_admins (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    hospital_id INT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users (id),
+    FOREIGN KEY (hospital_id) REFERENCES hospitals (id)
+);
 
 CREATE TABLE `ambulance_trips` (
     `id` int(11) NOT NULL AUTO_INCREMENT,
